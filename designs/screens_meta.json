@@ -1,0 +1,123 @@
+{
+  "screens": [
+    {
+      "name": "projects/5599174139788830254/screens/424eddd40c4f4645a49f2958160f6995",
+      "title": "스레드 대화 목록 (구글챗 스타일)",
+      "screenshot": {
+        "name": "projects/5599174139788830254/files/8871852757837653641",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/8871852757837653641:download",
+        "mimeType": "image/jpeg"
+      },
+      "htmlCode": {
+        "name": "projects/5599174139788830254/files/13607168143498726421",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/13607168143498726421:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "1768",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/27bf05009c8d425c8c0527c5aa8eda83",
+      "title": "실시간 대화 - 한글 입력 AI 영작 변환 추천",
+      "screenshot": {
+        "name": "projects/5599174139788830254/files/13406787310460808686",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/13406787310460808686:download",
+        "mimeType": "image/jpeg"
+      },
+      "htmlCode": {
+        "name": "projects/5599174139788830254/files/5578923749901941134",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/5578923749901941134:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "2270",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/524ec14c0d514278b4864b3ecf29b203",
+      "title": "스레드 분석 및 심화 인스펙터 (구글챗 스타일)",
+      "screenshot": {
+        "name": "projects/5599174139788830254/files/514030566697380565",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/514030566697380565:download",
+        "mimeType": "image/jpeg"
+      },
+      "htmlCode": {
+        "name": "projects/5599174139788830254/files/1887818286513113412",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/1887818286513113412:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "2650",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/538d0f23343149e4b3179014f4955640",
+      "title": "보관함 - 타겟 표현 다이얼로그 생성",
+      "screenshot": {
+        "name": "projects/5599174139788830254/files/2487979475255359800",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/2487979475255359800:download",
+        "mimeType": "image/jpeg"
+      },
+      "htmlCode": {
+        "name": "projects/5599174139788830254/files/3655099156168860525",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/3655099156168860525:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "3356",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/b00505dac2154c70b52ce9c2399d016c",
+      "title": "보관함 - 영어 콘텐츠 대본",
+      "screenshot": {
+        "name": "projects/4879529707606669738/screens/b00505dac2154c70b52ce9c2399d016c/fileEntries/screenshot",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/screenshot_00065f04a44d695f03749a8c440c9ebf:download",
+        "mimeType": "image/png"
+      },
+      "htmlCode": {
+        "name": "projects/4879529707606669738/screens/b00505dac2154c70b52ce9c2399d016c/fileEntries/html",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/b00505dac2154c70b52ce9c2399d016c:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "3062",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/b1398f9e82bf41d8a6b20ccf2d861890",
+      "title": "실시간 스레드 대화 - 추천 답장 카드 스타일 통일",
+      "screenshot": {
+        "name": "projects/5599174139788830254/files/15983459395833413428",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/15983459395833413428:download",
+        "mimeType": "image/jpeg"
+      },
+      "htmlCode": {
+        "name": "projects/5599174139788830254/files/3299233371066237008",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/3299233371066237008:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "2110",
+      "deviceType": "MOBILE"
+    },
+    {
+      "name": "projects/5599174139788830254/screens/8acfb46fec074b9396266cf6bf355a1e",
+      "title": "보관함 - 영어회화 표현",
+      "screenshot": {
+        "name": "projects/4879529707606669738/screens/8acfb46fec074b9396266cf6bf355a1e/fileEntries/screenshot",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/screenshot_00065f04a44d693003749a8c440c9ebf:download",
+        "mimeType": "image/png"
+      },
+      "htmlCode": {
+        "name": "projects/4879529707606669738/screens/8acfb46fec074b9396266cf6bf355a1e/fileEntries/html",
+        "downloadUrl": "https://stitch.googleapis.com/v1/projects/5599174139788830254/files/8acfb46fec074b9396266cf6bf355a1e:download",
+        "mimeType": "text/html"
+      },
+      "width": "780",
+      "height": "2488",
+      "deviceType": "MOBILE"
+    }
+  ]
+}
