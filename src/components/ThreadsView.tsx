@@ -6,13 +6,17 @@ interface ThreadsViewProps {
   activeThreadId: string;
   onSelectThread: (thread: Thread) => void;
   onCreateThread?: (title: string, partnerName: string) => void;
+  onDeleteThread?: (threadId: string) => void;
+  onNavigateToFriends?: () => void;
 }
 
 export const ThreadsView: React.FC<ThreadsViewProps> = ({
   threads,
   activeThreadId,
   onSelectThread,
-  onCreateThread
+  onCreateThread,
+  onDeleteThread,
+  onNavigateToFriends
 }) => {
   const [filter, setFilter] = useState<'all' | 'fav' | 'daily' | 'business'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,10 +51,12 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
   const formatTime = (ts: number) => {
     const diff = Date.now() - ts;
     const mins = Math.floor(diff / (1000 * 60));
+    if (mins < 1) return '방금 전';
     if (mins < 60) return `${mins}분 전`;
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}시간 전`;
-    return '어제';
+    const days = Math.floor(hours / 24);
+    return `${days}일 전`;
   };
 
   return (
@@ -98,10 +104,34 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
 
       {/* 스레드 카드 리스트 */}
       <div className="divide-y divide-[#f0f4f9] mt-1">
-        {filteredThreads.length === 0 ? (
+        {threads.length === 0 ? (
+          <div className="py-20 px-6 text-center text-[#5f6368] space-y-4">
+            <div className="w-16 h-16 bg-[#e8f0fe] rounded-3xl mx-auto flex items-center justify-center text-[#1a73e8]">
+              <span className="material-symbols-outlined text-[36px]">forum</span>
+            </div>
+            <div>
+              <h3 className="text-[16px] font-bold text-[#1f1f1f] mb-1">
+                아직 시작된 대화가 없습니다
+              </h3>
+              <p className="text-[13px] text-[#5f6368] leading-relaxed">
+                '회화 친구' 메뉴에서 마음에 드는 AI 파트너를 선택하여<br />
+                첫 영어 스몰톡을 시작해보세요!
+              </p>
+            </div>
+            {onNavigateToFriends && (
+              <button
+                onClick={onNavigateToFriends}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1a73e8] text-white rounded-2xl text-[13px] font-semibold hover:bg-[#1557b0] shadow-sm active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[18px]">group</span>
+                회화 친구 선택하기
+              </button>
+            )}
+          </div>
+        ) : filteredThreads.length === 0 ? (
           <div className="py-16 text-center text-[#5f6368]">
-            <span className="material-symbols-outlined text-[48px] text-[#bfc6dd] mb-2">forum</span>
-            <p className="text-[14px]">해당 조건의 대화 스레드가 없습니다.</p>
+            <span className="material-symbols-outlined text-[48px] text-[#bfc6dd] mb-2">search_off</span>
+            <p className="text-[14px]">검색 조건에 맞는 대화가 없습니다.</p>
           </div>
         ) : (
           filteredThreads.map((thread) => {
@@ -110,7 +140,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
               <article
                 key={thread.id}
                 onClick={() => onSelectThread(thread)}
-                className={`flex items-start gap-3.5 px-4 py-3.5 cursor-pointer transition-colors active:bg-[#edf2fa] ${
+                className={`flex items-start gap-3.5 px-4 py-3.5 cursor-pointer transition-colors active:bg-[#edf2fa] group relative ${
                   isSelected ? 'bg-[#eef4ff]' : 'hover:bg-[#f8fafd]'
                 }`}
               >
@@ -126,7 +156,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                 </div>
 
                 {/* 대화 정보 */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pr-6">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="text-[15px] font-semibold text-[#1f1f1f] truncate">
@@ -146,9 +176,25 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                   </p>
 
                   <p className="text-[13px] text-[#444746] truncate">
-                    {thread.lastMessage}
+                    {thread.lastMessage || '대화를 시작해보세요.'}
                   </p>
                 </div>
+
+                {/* 삭제 버튼 */}
+                {onDeleteThread && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`'${thread.title}' 대화방을 삭제하시겠습니까?`)) {
+                        onDeleteThread(thread.id);
+                      }
+                    }}
+                    className="absolute right-3 top-4 text-[#9aa0a6] hover:text-[#d93025] p-1.5 rounded-full hover:bg-black/5 transition-colors"
+                    title="대화방 삭제"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+                )}
               </article>
             );
           })
@@ -162,7 +208,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
           className="h-14 px-5 rounded-2xl bg-[#c2e7ff] text-[#001d35] hover:bg-[#b3e1ff] active:scale-95 transition-all shadow-md flex items-center gap-2.5 font-semibold text-[14px]"
         >
           <span className="material-symbols-outlined text-[22px]">edit</span>
-          <span>새 스몰톡 시작</span>
+          <span>새 대화 만들기</span>
         </button>
       </div>
 
@@ -173,7 +219,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
             <h3 className="text-[17px] font-bold text-[#1f1f1f] mb-3">새 대화 스레드 개설</h3>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
-                <label className="block text-[12px] font-medium text-[#5f6368] mb-1">대화 상대 (AI 파트너 페르소나)</label>
+                <label className="block text-[12px] font-medium text-[#5f6368] mb-1">대화 상대 (AI 파트너 이름)</label>
                 <input
                   type="text"
                   placeholder="예: 마이클 (여행 가이드)"
@@ -216,4 +262,3 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
     </div>
   );
 };
-

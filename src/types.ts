@@ -65,5 +65,17 @@ export interface SavedScript {
   createdAt: number;
 }
 
-export type MainTab = 'threads' | 'chat' | 'analysis' | 'archive';
+export interface Friend {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  avatarBg: string;
+  avatarText: string;
+  category: 'daily' | 'business' | 'travel' | 'interview' | 'tutor';
+  greeting: string;
+  badge?: string;
+}
+
+export type MainTab = 'friends' | 'threads' | 'chat' | 'analysis' | 'archive';
 

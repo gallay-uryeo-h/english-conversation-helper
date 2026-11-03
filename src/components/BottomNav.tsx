@@ -10,21 +10,21 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, unreadCount }) => {
   const tabs = [
     {
+      id: 'friends' as MainTab,
+      label: '회화 친구',
+      icon: 'group',
+      fill: currentTab === 'friends'
+    },
+    {
       id: 'threads' as MainTab,
       label: '대화 목록',
       icon: 'forum',
-      fill: currentTab === 'threads'
-    },
-    {
-      id: 'chat' as MainTab,
-      label: '실시간 채팅',
-      icon: 'chat',
-      badge: unreadCount,
-      fill: currentTab === 'chat'
+      fill: currentTab === 'threads' || currentTab === 'chat',
+      badge: unreadCount
     },
     {
       id: 'analysis' as MainTab,
-      label: '대화 분석',
+      label: '언어 분석',
       icon: 'insights',
       fill: currentTab === 'analysis'
     },
@@ -40,7 +40,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#f0f4f9] border-t border-[#e0e3e7] pb-[env(safe-area-inset-bottom,0px)] shadow-lg max-w-md mx-auto">
       <div className="h-16 px-2 grid grid-cols-4 items-center">
         {tabs.map((tab) => {
-          const isActive = currentTab === tab.id;
+          const isActive = tab.fill;
           return (
             <button
               key={tab.id}
@@ -60,15 +60,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
                 >
                   {tab.icon}
                 </span>
-                {tab.badge && tab.badge > 0 ? (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#ba1a1a] text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+
+                {typeof tab.badge === 'number' && tab.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#b3261e] text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#f0f4f9]">
                     {tab.badge}
                   </span>
-                ) : null}
+                )}
               </div>
-              <span className={`text-[11px] font-medium transition-colors ${
-                isActive ? 'font-semibold text-[#001d35]' : 'text-[#444746]'
-              }`}>
+              <span className={`text-[11px] font-medium tracking-tight ${isActive ? 'text-[#001d35] font-semibold' : 'text-[#444746]'}`}>
                 {tab.label}
               </span>
             </button>
@@ -78,4 +77,3 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
     </nav>
   );
 };
-

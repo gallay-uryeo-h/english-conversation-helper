@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { MainTab, Thread, Message, SavedExpression, SavedScript, RecommendationCard } from './types';
-import { storageService } from './services/storageService';
+import { MainTab, Thread, Message, SavedExpression, SavedScript, RecommendationCard, Friend } from './types';
+import { storageService, DEFAULT_FRIENDS } from './services/storageService';
 import { aiService } from './services/aiService';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
+import { FriendsView } from './components/FriendsView';
 import { ThreadsView } from './components/ThreadsView';
 import { ChatView } from './components/ChatView';
 import { AnalysisView } from './components/AnalysisView';
@@ -13,7 +14,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const MainApp: React.FC = () => {
   const { user, appTarget, allowedEmails, allowedDomains } = useAuth();
-  const [currentTab, setCurrentTab] = useState<MainTab>('threads');
+  const [currentTab, setCurrentTab] = useState<MainTab>('friends');
+  const [friends, setFriends] = useState<Friend[]>(DEFAULT_FRIENDS);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,6 +34,11 @@ const MainApp: React.FC = () => {
         // 로그인한 사용자 UID로 데이터 스토리지 격리
         storageService.setUserId(user.uid);
 
+        // 1. 친구 목록 로드
+        const loadedFriends = await storageService.getFriends();
+        setFriends(loadedFriends);
+
+        // 2. 대화방 목록 로드
         const fetchedThreads = await storageService.getThreads();
         setThreads(fetchedThreads);
         if (fetchedThreads.length > 0) {
@@ -42,6 +49,8 @@ const MainApp: React.FC = () => {
           setActiveThread(null);
           setMessages([]);
         }
+
+        // 3. 보관함 데이터 로드
         const expList = await storageService.getSavedExpressions();
         setExpressions(expList);
         const scriptList = await storageService.getSavedScripts();
@@ -55,6 +64,55 @@ const MainApp: React.FC = () => {
     initData();
   }, [user?.uid]);
 
+  // 친구 카드를 눌러 1:1 대화 시작
+  const handleStartChatWithFriend = async (friend: Friend) => {
+    // 1. 이미 해당 친구와의 대화방이 있는지 확인
+    const existing = threads.find(t => t.partnerName === friend.name);
+    if (existing) {
+      setActiveThread(existing);
+      const msgs = await storageService.getMessages(existing.id);
+      setMessages(msgs);
+      setCurrentTab('chat');
+      return;
+    }
+
+    // 2. 새 대화방 개설
+    const newThread: Thread = {
+      id: `thread-${Date.now()}`,
+      title: `${friend.name}와의 스몰톡`,
+      partnerName: friend.name,
+      partnerRole: friend.role,
+      avatarBg: friend.avatarBg,
+      avatarText: friend.avatarText,
+      lastMessage: friend.greeting,
+      updatedAt: Date.now(),
+      category: friend.category === 'tutor' ? 'daily' : friend.category
+    };
+
+    // 3. 친구의 첫 인사 메시지 자동 생성
+    const greetingMsg: Message = {
+      id: `msg-greeting-${Date.now()}`,
+      sender: 'assistant',
+      text: friend.greeting,
+      timestamp: Date.now()
+    };
+
+    const updated = [newThread, ...threads];
+    setThreads(updated);
+    setActiveThread(newThread);
+    setMessages([greetingMsg]);
+    setCurrentTab('chat');
+
+    await storageService.saveThread(newThread);
+    await storageService.saveMessage(newThread.id, greetingMsg);
+  };
+
+  // 새 친구 추가
+  const handleAddFriend = async (friend: Friend) => {
+    await storageService.saveFriend(friend);
+    setFriends((prev) => [friend, ...prev]);
+  };
+
   // 활성 스레드 변경 시 해당 스레드의 메시지 로드
   const handleSelectThread = async (thread: Thread) => {
     setActiveThread(thread);
@@ -63,7 +121,18 @@ const MainApp: React.FC = () => {
     setCurrentTab('chat');
   };
 
-  // 새 스레드 생성
+  // 대화방 삭제
+  const handleDeleteThread = async (threadId: string) => {
+    await storageService.deleteThread(threadId);
+    setThreads((prev) => prev.filter(t => t.id !== threadId));
+    if (activeThread?.id === threadId) {
+      setActiveThread(null);
+      setMessages([]);
+      setCurrentTab('threads');
+    }
+  };
+
+  // 새 스레드 직접 생성
   const handleCreateThread = async (title: string, partnerName: string) => {
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
@@ -71,7 +140,7 @@ const MainApp: React.FC = () => {
       partnerName,
       partnerRole: 'Conversational Partner',
       avatarBg: '#d0e1fb',
-      avatarText: partnerName.charAt(0),
+      avatarText: partnerName.charAt(0).toUpperCase(),
       lastMessage: '대화가 시작되었습니다.',
       updatedAt: Date.now(),
       category: 'daily'
@@ -81,6 +150,8 @@ const MainApp: React.FC = () => {
     setActiveThread(newThread);
     setMessages([]);
     setCurrentTab('chat');
+
+    await storageService.saveThread(newThread);
   };
 
   // 메시지 전송 및 AI 응답 처리
@@ -110,7 +181,11 @@ const MainApp: React.FC = () => {
 
     // 2. AI 파트너의 응답 생성
     setTimeout(async () => {
-      const replyText = aiService.generateAssistantReply(activeThread.partnerName, text);
+      const replyText = await aiService.generateAssistantReplyAsync(
+        activeThread.partnerName, 
+        activeThread.partnerRole || '', 
+        text
+      );
       const assistantMsg: Message = {
         id: `msg-ai-${Date.now()}`,
         sender: 'assistant',
@@ -119,13 +194,19 @@ const MainApp: React.FC = () => {
       };
       setMessages((prev) => [...prev, assistantMsg]);
       await storageService.saveMessage(activeThread.id, assistantMsg);
-    }, 900);
+    }, 850);
   };
 
   // 표현 보관함 저장
   const handleSaveToArchive = async (exp: SavedExpression) => {
     setExpressions((prev) => [exp, ...prev]);
     await storageService.saveExpression(exp);
+  };
+
+  // 표현 보관함 삭제
+  const handleDeleteExpression = async (id: string) => {
+    await storageService.deleteExpression(id);
+    setExpressions((prev) => prev.filter(e => e.id !== id));
   };
 
   return (
@@ -149,15 +230,28 @@ const MainApp: React.FC = () => {
             </div>
           ) : (
             <>
+              {/* 1. 회화 친구 메뉴 */}
+              {currentTab === 'friends' && (
+                <FriendsView 
+                  friends={friends}
+                  onStartChat={handleStartChatWithFriend}
+                  onAddFriend={handleAddFriend}
+                />
+              )}
+
+              {/* 2. 대화 목록 메뉴 */}
               {currentTab === 'threads' && (
                 <ThreadsView 
                   threads={threads}
                   activeThreadId={activeThread?.id || ''}
                   onSelectThread={handleSelectThread}
                   onCreateThread={handleCreateThread}
+                  onDeleteThread={handleDeleteThread}
+                  onNavigateToFriends={() => setCurrentTab('friends')}
                 />
               )}
 
+              {/* 3. 실시간 1:1 채팅 뷰 */}
               {currentTab === 'chat' && activeThread && (
                 <ChatView 
                   activeThread={activeThread}
@@ -170,6 +264,7 @@ const MainApp: React.FC = () => {
                 />
               )}
 
+              {/* 4. 언어 인스펙터 분석 뷰 */}
               {currentTab === 'analysis' && (
                 <AnalysisView 
                   selectedMessage={selectedMessageForAnalysis}
@@ -177,11 +272,13 @@ const MainApp: React.FC = () => {
                 />
               )}
 
+              {/* 5. 표현 및 대본 보관함 뷰 */}
               {currentTab === 'archive' && (
                 <ArchiveView 
                   expressions={expressions}
                   scripts={scripts}
                   onAddExpression={handleSaveToArchive}
+                  onDeleteExpression={handleDeleteExpression}
                 />
               )}
             </>
@@ -215,7 +312,7 @@ const MainApp: React.FC = () => {
                   🔒 Firestore 단일 컬렉션 + 계정별 격리
                 </span>
                 <p className="text-[12px]">
-                  루트 컬렉션 <code className="bg-white px-1.5 py-0.5 rounded text-[#001d35] font-mono">english-conversation-helper</code> 하위에서 로그인한 사용자의 UID별로 데이터를 완벽하게 격리 저장합니다.
+                  루트 컬렉션 <code className="bg-white px-1.5 py-0.5 rounded text-[#001d35] font-mono">english-conversation-helper</code> 하위에서 로그인한 사용자의 UID별로 데이터를 격리 저장합니다.
                 </p>
               </div>
 

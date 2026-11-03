@@ -17,10 +17,11 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack
     <header className="sticky top-0 z-40 bg-[#f0f4f9] border-b border-[#e0e3e7] pt-[env(safe-area-inset-top,0px)] max-w-md mx-auto relative">
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          {onBack && currentTab !== 'threads' && (
+          {onBack && currentTab === 'chat' && (
             <button 
               onClick={onBack}
               className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
+              title="대화 목록으로 돌아가기"
             >
               <span className="material-symbols-outlined text-[22px]">arrow_back</span>
             </button>
@@ -28,10 +29,16 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack
 
           <div className="truncate">
             <h1 className="text-[17px] font-semibold text-[#1f1f1f] truncate leading-tight flex items-center gap-1.5">
+              {currentTab === 'friends' && (
+                <>
+                  <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">group</span>
+                  AI 회화 파트너
+                </>
+              )}
               {currentTab === 'threads' && (
                 <>
                   <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">forum</span>
-                  스레드 대화 목록
+                  진행 중인 대화
                 </>
               )}
               {currentTab === 'chat' && (

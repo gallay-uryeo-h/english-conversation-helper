@@ -5,142 +5,64 @@ import {
   getDoc, 
   setDoc
 } from '../firebase';
-import { Thread, Message, SavedExpression, SavedScript } from '../types';
+import { Thread, Message, SavedExpression, SavedScript, Friend } from '../types';
 
-// 초기 시드 데이터 (시안 기반)
-const INITIAL_THREADS: Thread[] = [
+// 기본 제공 AI 회화 친구 목록
+export const DEFAULT_FRIENDS: Friend[] = [
   {
-    id: 'thread-1',
-    title: '비 오는 날의 일상 스몰톡',
-    partnerName: '박서준 (Alex)',
-    partnerRole: 'Casual Native Friend',
-    avatarBg: '#fce8e6',
+    id: 'friend-alex',
+    name: '박서준 (Alex)',
+    role: 'Casual Native Friend',
+    description: '편안한 일상 스몰톡, 취미, 주말 계획을 나누는 친근한 원어민 친구',
+    avatarBg: '#d0e1fb',
     avatarText: '준',
-    lastMessage: 'I forgot my umbrella so I got wet... But warm noodles were good!',
-    updatedAt: Date.now() - 1000 * 60 * 30, // 30분 전
-    isFavorite: true,
-    category: 'daily'
+    category: 'daily',
+    greeting: "Hey! What's up? How is your day going so far?",
+    badge: '일상 회화'
   },
   {
-    id: 'thread-2',
-    title: '새 앨범과 음악 취향 토크',
-    partnerName: '최수아 (Chloe)',
-    partnerRole: 'Music Producer & Critic',
+    id: 'friend-chloe',
+    name: '최수아 (Chloe)',
+    role: 'Culture & Trend Enthusiast',
+    description: '음악, 영화, SNS 트렌드와 감각적인 요즘 영어 표현을 함께 이야기하는 친구',
     avatarBg: '#f3e8fd',
     avatarText: '수',
-    lastMessage: 'What is your favorite track on the new album?',
-    updatedAt: Date.now() - 1000 * 60 * 120, // 2시간 전
-    isFavorite: true,
-    category: 'daily'
+    category: 'daily',
+    greeting: "Hello there! Found any great music or movies lately? I'd love to chat!",
+    badge: '문화/트렌드'
   },
   {
-    id: 'thread-3',
-    title: '디자인 시스템 가이드라인 리뷰',
-    partnerName: '김민지 (Sarah)',
-    partnerRole: 'Senior Product Designer',
+    id: 'friend-sarah',
+    name: '김민지 (Sarah)',
+    role: 'Global Business Coach',
+    description: '비즈니스 이메일, 업무 협의, 회의 발표 및 인터뷰 표현을 코칭해주는 프로',
     avatarBg: '#e8f0fe',
     avatarText: '민',
-    lastMessage: 'Could we align on the token hierarchy before the release?',
-    updatedAt: Date.now() - 1000 * 60 * 60 * 5,
-    isFavorite: false,
-    category: 'business'
-  }
-];
-
-const INITIAL_MESSAGES: Record<string, Message[]> = {
-  'thread-1': [
-    {
-      id: 'msg-1',
-      sender: 'assistant',
-      text: "Hey! The weather has been really unpredictable today. Did you get caught in the rain?",
-      timestamp: Date.now() - 1000 * 60 * 45
-    },
-    {
-      id: 'msg-2',
-      sender: 'user',
-      text: "I forgot my umbrella so I got soaking wet, but eating hot ramen afterward made my day!",
-      koreanDraft: "우산 깜빡해서 다 젖었는데 그래도 따뜻한 라면 먹고 기분 풀렸어",
-      timestamp: Date.now() - 1000 * 60 * 35,
-      recommendations: [
-        {
-          id: 'rec-1',
-          tone: 'Natural',
-          english: "I forgot my umbrella and got completely soaked, but some hot ramen turned my day around!",
-          koreanMeaning: "자연스러운 구어체 감정 표현",
-          grammarTip: "get soaked = 흠뻑 젖다"
-        },
-        {
-          id: 'rec-2',
-          tone: 'Casual',
-          english: "No umbrella, so I was drenched! But warm soup totally saved the day.",
-          koreanMeaning: "친구와의 편안한 대화",
-          grammarTip: "drenched = 물에 푹 젖은"
-        }
-      ],
-      analysis: {
-        grammarScore: 92,
-        fluencyScore: 95,
-        improvedVersion: "I left my umbrella behind and got soaked, but hot noodles cheered me right up!",
-        explanation: "'make my day'도 훌륭하지만 'turned my day around' 또는 'cheered me up'을 쓰면 기분 전환의 뉘앙스가 더 선명해집니다.",
-        keyVocabulary: [
-          { word: "get soaked", meaning: "비 등에 흠뻑 젖다", phonetic: "/ɡɛt soʊkt/" },
-          { word: "turn around", meaning: "상황이나 기분을 반전시키다", phonetic: "/tɜːrn əˈraʊnd/" }
-        ]
-      }
-    },
-    {
-      id: 'msg-3',
-      sender: 'assistant',
-      text: "Haha, there's honestly nothing better than warm comfort food after a chilly downpour! What kind of noodles did you have?",
-      timestamp: Date.now() - 1000 * 60 * 30
-    }
-  ]
-};
-
-const INITIAL_EXPRESSIONS: SavedExpression[] = [
-  {
-    id: 'exp-1',
-    english: 'turn one\'s day around',
-    korean: '기분/상황을 좋게 반전시키다',
-    exampleSentence: 'A warm cup of coffee completely turned my day around.',
-    situation: '기분 전환 / 소소한 위로',
-    tag: 'Casual Idiom',
-    createdAt: Date.now() - 1000 * 60 * 60 * 24
+    category: 'business',
+    greeting: "Good to meet you. Are you preparing for any business discussions or presentations today?",
+    badge: '비즈니스'
   },
   {
-    id: 'exp-2',
-    english: 'caught in the rain',
-    korean: '갑작스러운 비를 만나다',
-    exampleSentence: 'I didn\'t expect the shower and got caught in the rain on my way home.',
-    situation: '날씨 / 통근',
-    tag: 'Daily Phrase',
-    createdAt: Date.now() - 1000 * 60 * 60 * 20
+    id: 'friend-liam',
+    name: 'Liam Smith',
+    role: 'Travel & Roleplay Guide',
+    description: '공항 입국, 호텔 체크인, 카페/식당 주문 등 해외 여행 실전 롤플레잉 파트너',
+    avatarBg: '#feefe3',
+    avatarText: 'L',
+    category: 'travel',
+    greeting: "Welcome! Where are we traveling today? Ready to practice ordering or checking in?",
+    badge: '여행/롤플레잉'
   },
   {
-    id: 'exp-3',
-    english: 'align on ~',
-    korean: '~에 대해 의견/방향을 일치시키다',
-    exampleSentence: 'Let\'s align on the project scope before starting development.',
-    situation: '비즈니스 / 미팅',
-    tag: 'Business',
-    createdAt: Date.now() - 1000 * 60 * 60 * 12
-  }
-];
-
-const INITIAL_SCRIPTS: SavedScript[] = [
-  {
-    id: 'script-1',
-    title: '비 오는 날의 소소한 카페 대화',
-    situation: '갑자기 비가 올 때 카페에서 만난 친구와의 스몰톡',
-    level: 'Intermediate (B1)',
-    targetExpression: 'turn my day around, get soaked',
-    createdAt: Date.now() - 1000 * 60 * 60 * 48,
-    dialogue: [
-      { speaker: 'Alex', isUser: false, english: 'Look at that rain pouring down! Did you bring an umbrella?', korean: '비 오는 것 좀 봐! 우산 챙겨왔어?' },
-      { speaker: 'You', isUser: true, english: 'Nope, I got totally soaked running across the street!', korean: '아니, 길 건너오면서 완전히 흠뻑 젖었어!' },
-      { speaker: 'Alex', isUser: false, english: 'Oh no! You must be freezing. Go grab a hot drink, my treat.', korean: '이런! 엄청 춥겠다. 따뜻한 음료 한 잔 마셔, 내가 살게.' },
-      { speaker: 'You', isUser: true, english: 'Thanks, a hot vanilla latte will definitely turn my day around.', korean: '고마워, 따뜻한 바닐라 라떼 마시면 기분 완전 좋아질 것 같아.' }
-    ]
+    id: 'friend-emma',
+    name: 'Emma Watson',
+    role: 'Friendly Beginner Tutor',
+    description: '쉬운 단어와 친절한 설명으로 영어가 낯선 분들도 자신감을 키워주는 다정한 튜터',
+    avatarBg: '#e6f4ea',
+    avatarText: 'E',
+    category: 'tutor',
+    greeting: "Hi! Don't worry about making mistakes at all. Let's take it slow and have fun!",
+    badge: '초보자 추천'
   }
 ];
 
@@ -160,7 +82,51 @@ export const storageService = {
     currentUserId = uid;
   },
 
-  // 스레드 목록 가져오기 (Firestore 실패 시 로컬 스토리지 Fallback 지원)
+  // 친구 목록 가져오기 (기본 친구 + 사용자가 추가한 친구)
+  async getFriends(): Promise<Friend[]> {
+    const docId = getDocId("friends_data");
+    const localKey = getLocalKey('app_friends');
+
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
+      const snap = await getDoc(docRef);
+      if (snap.exists() && snap.data().items) {
+        return snap.data().items as Friend[];
+      }
+      // 최초 실행 시 기본 친구 리스트 등록
+      await setDoc(docRef, { items: DEFAULT_FRIENDS });
+      return DEFAULT_FRIENDS;
+    } catch (e) {
+      console.warn("Firestore friends fetch error, fallback to local:", e);
+      const local = localStorage.getItem(localKey);
+      if (local) return JSON.parse(local);
+      localStorage.setItem(localKey, JSON.stringify(DEFAULT_FRIENDS));
+      return DEFAULT_FRIENDS;
+    }
+  },
+
+  // 새 친구 추가
+  async saveFriend(friend: Friend): Promise<void> {
+    const docId = getDocId("friends_data");
+    const localKey = getLocalKey('app_friends');
+
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
+      const snap = await getDoc(docRef);
+      let items: Friend[] = DEFAULT_FRIENDS;
+      if (snap.exists() && snap.data().items) {
+        items = snap.data().items;
+      }
+      items = [friend, ...items];
+      await setDoc(docRef, { items });
+    } catch (e) {
+      const local: Friend[] = JSON.parse(localStorage.getItem(localKey) || JSON.stringify(DEFAULT_FRIENDS));
+      local.unshift(friend);
+      localStorage.setItem(localKey, JSON.stringify(local));
+    }
+  },
+
+  // 스레드(대화방) 목록 가져오기 (실제 사용자 데이터만 반환, mock 제외)
   async getThreads(): Promise<Thread[]> {
     const docId = getDocId("threads_data");
     const localKey = getLocalKey('app_threads');
@@ -171,15 +137,64 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Thread[];
       }
-      // 최초 실행 시 기본 데이터 등록
-      await setDoc(threadsDocRef, { items: INITIAL_THREADS });
-      return INITIAL_THREADS;
+      // 최초 사용자: 빈 배열로 초기화 (가짜 mock 데이터 제거)
+      await setDoc(threadsDocRef, { items: [] });
+      return [];
     } catch (e) {
-      console.warn("Firestore access error, falling back to local memory:", e);
+      console.warn("Firestore threads fetch error, fallback to local:", e);
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem(localKey, JSON.stringify(INITIAL_THREADS));
-      return INITIAL_THREADS;
+      return [];
+    }
+  },
+
+  // 스레드 생성 또는 업데이트
+  async saveThread(thread: Thread): Promise<void> {
+    const threadsDocId = getDocId("threads_data");
+    const localKey = getLocalKey('app_threads');
+
+    try {
+      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
+      const snap = await getDoc(threadsDocRef);
+      let items: Thread[] = [];
+      if (snap.exists() && snap.data().items) {
+        items = snap.data().items as Thread[];
+      }
+      const existingIdx = items.findIndex(t => t.id === thread.id);
+      if (existingIdx >= 0) {
+        items[existingIdx] = thread;
+      } else {
+        items.unshift(thread);
+      }
+      await setDoc(threadsDocRef, { items });
+    } catch (e) {
+      const local: Thread[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const existingIdx = local.findIndex(t => t.id === thread.id);
+      if (existingIdx >= 0) {
+        local[existingIdx] = thread;
+      } else {
+        local.unshift(thread);
+      }
+      localStorage.setItem(localKey, JSON.stringify(local));
+    }
+  },
+
+  // 스레드 삭제
+  async deleteThread(threadId: string): Promise<void> {
+    const threadsDocId = getDocId("threads_data");
+    const localKey = getLocalKey('app_threads');
+
+    try {
+      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
+      const snap = await getDoc(threadsDocRef);
+      if (snap.exists() && snap.data().items) {
+        const items = (snap.data().items as Thread[]).filter(t => t.id !== threadId);
+        await setDoc(threadsDocRef, { items });
+      }
+    } catch (e) {
+      const local: Thread[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const filtered = local.filter(t => t.id !== threadId);
+      localStorage.setItem(localKey, JSON.stringify(filtered));
     }
   },
 
@@ -194,16 +209,12 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Message[];
       }
-      const initial = INITIAL_MESSAGES[threadId] || [];
-      await setDoc(msgDocRef, { items: initial });
-      return initial;
+      return [];
     } catch (e) {
-      console.warn("Firestore message fetch error, falling back to local:", e);
+      console.warn("Firestore message fetch error, fallback to local:", e);
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      const initial = INITIAL_MESSAGES[threadId] || [];
-      localStorage.setItem(localKey, JSON.stringify(initial));
-      return initial;
+      return [];
     }
   },
 
@@ -254,13 +265,11 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as SavedExpression[];
       }
-      await setDoc(docRef, { items: INITIAL_EXPRESSIONS });
-      return INITIAL_EXPRESSIONS;
+      return [];
     } catch (e) {
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem(localKey, JSON.stringify(INITIAL_EXPRESSIONS));
-      return INITIAL_EXPRESSIONS;
+      return [];
     }
   },
 
@@ -285,6 +294,25 @@ export const storageService = {
     }
   },
 
+  // 표현 삭제
+  async deleteExpression(id: string): Promise<void> {
+    const docId = getDocId("saved_expressions");
+    const localKey = getLocalKey('app_expressions');
+
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
+      const snap = await getDoc(docRef);
+      if (snap.exists() && snap.data().items) {
+        const filtered = (snap.data().items as SavedExpression[]).filter(e => e.id !== id);
+        await setDoc(docRef, { items: filtered });
+      }
+    } catch (e) {
+      const local: SavedExpression[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const filtered = local.filter(e => e.id !== id);
+      localStorage.setItem(localKey, JSON.stringify(filtered));
+    }
+  },
+
   // 보관된 대본 목록 가져오기
   async getSavedScripts(): Promise<SavedScript[]> {
     const docId = getDocId("saved_scripts");
@@ -296,13 +324,32 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as SavedScript[];
       }
-      await setDoc(docRef, { items: INITIAL_SCRIPTS });
-      return INITIAL_SCRIPTS;
+      return [];
     } catch (e) {
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem(localKey, JSON.stringify(INITIAL_SCRIPTS));
-      return INITIAL_SCRIPTS;
+      return [];
+    }
+  },
+
+  // 대본 추가
+  async saveScript(script: SavedScript): Promise<void> {
+    const docId = getDocId("saved_scripts");
+    const localKey = getLocalKey('app_scripts');
+
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
+      const snap = await getDoc(docRef);
+      let items: SavedScript[] = [];
+      if (snap.exists() && snap.data().items) {
+        items = snap.data().items;
+      }
+      items.unshift(script);
+      await setDoc(docRef, { items });
+    } catch (e) {
+      const local = JSON.parse(localStorage.getItem(localKey) || '[]');
+      local.unshift(script);
+      localStorage.setItem(localKey, JSON.stringify(local));
     }
   }
 };
