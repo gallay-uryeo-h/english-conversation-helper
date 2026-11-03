@@ -103,18 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* 어드민 계정 관리 버튼 (관리자만 노출) */}
-          {isAdmin && onOpenAdmin && (
-            <button
-              onClick={onOpenAdmin}
-              className="h-8 px-2.5 bg-[#fef7e0] hover:bg-[#feefc3] text-[#b06000] rounded-full flex items-center gap-1 text-[11px] font-bold border border-[#fbd65c] transition-all active:scale-95 shadow-xs"
-              title="접근 허용 계정 일괄 관리"
-            >
-              <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
-              <span>계정 관리</span>
-            </button>
-          )}
-
           {/* 앱 설치 버튼 (PWA) */}
           <button
             onClick={handleInstallClick}
@@ -137,7 +125,7 @@ export const Header: React.FC<HeaderProps> = ({
           {user && (
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0 ml-0.5"
+              className="relative w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0 ml-0.5"
               title={`${user.displayName || user.email} 프로필`}
             >
               {user.photoURL ? (
@@ -149,6 +137,11 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               ) : (
                 <span>{(user.displayName || user.email || 'U').charAt(0).toUpperCase()}</span>
+              )}
+
+              {/* 관리자 뱃지 도트 */}
+              {isAdmin && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#f29900] border-2 border-white rounded-full"></span>
               )}
             </button>
           )}
@@ -194,18 +187,19 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
               {isAdmin && (
                 <span className="block text-[10px] font-bold text-[#b06000]">
-                  👑 마스터 관리자 권한 활성화됨
+                  👑 마스터 관리자 권한
                 </span>
               )}
             </div>
 
+            {/* 프로필 팝업 내 어드민 계정 관리 버튼 */}
             {isAdmin && onOpenAdmin && (
               <button
                 onClick={() => {
                   setShowProfileMenu(false);
                   onOpenAdmin();
                 }}
-                className="w-full mb-1.5 py-2 px-3 bg-[#fef7e0] hover:bg-[#feefc3] text-[#b06000] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full mb-1.5 py-2 px-3 bg-[#fef7e0] hover:bg-[#feefc3] text-[#b06000] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#fbd65c]"
               >
                 <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
                 접근 허용 계정 관리
