@@ -6,7 +6,6 @@ interface HeaderProps {
   currentTab: MainTab;
   activeThread: Thread | null;
   onBack?: () => void;
-  onOpenInfo?: () => void;
   onOpenAdmin?: () => void;
 }
 
@@ -14,20 +13,17 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab, 
   activeThread, 
   onBack, 
-  onOpenInfo,
   onOpenAdmin 
 }) => {
   const { user, logout, appTarget, isAdmin } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
 
   // PWA 설치 가능 여부 감지 (Chrome / Edge / Android)
   useEffect(() => {
     const handleBeforeInstall = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsInstallable(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -37,24 +33,21 @@ export const Header: React.FC<HeaderProps> = ({
   const handleInstallClick = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      const choiceResult = await deferredPrompt.userChoice;
-      if (choiceResult.outcome === 'accepted') {
-        setIsInstallable(false);
-      }
+      await deferredPrompt.userChoice;
       setDeferredPrompt(null);
     } else {
-      alert("iOS Safari 브라우저에서는 하단의 [공유] 아이콘을 누른 후 [홈 화면에 추가]를 선택하시면 앱으로 설치됩니다.");
+      alert("iOS Safari 브라우저는 하단의 [공유] 아이콘을 누른 후 [홈 화면에 추가]를 선택하시면 앱으로 설치할 수 있습니다.");
     }
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-[#f0f4f9] border-b border-[#e0e3e7] pt-[env(safe-area-inset-top,0px)] max-w-md mx-auto relative">
-      <div className="h-14 px-4 flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-[#f0f4f9] border-b border-[#e0e3e7] pt-[env(safe-area-inset-top,0px)] w-full relative">
+      <div className="h-14 px-4 flex items-center justify-between w-full">
         <div className="flex items-center gap-2 min-w-0">
           {onBack && currentTab === 'chat' && (
             <button 
               onClick={onBack}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95 shrink-0"
               title="이전 화면으로 돌아가기"
             >
               <span className="material-symbols-outlined text-[22px]">arrow_back</span>
@@ -77,8 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
               )}
               {currentTab === 'chat' && (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#188038] animate-pulse"></span>
-                  {activeThread?.partnerName || '실시간 스레드 대화'}
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#188038] animate-pulse shrink-0"></span>
+                  <span className="truncate">{activeThread?.partnerName || '실시간 스레드 대화'}</span>
                 </>
               )}
               {currentTab === 'analysis' && (
@@ -103,29 +96,11 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* 앱 설치 버튼 (PWA) */}
-          <button
-            onClick={handleInstallClick}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#1a73e8] hover:bg-black/5 active:scale-95"
-            title="홈 화면에 앱 설치하기"
-          >
-            <span className="material-symbols-outlined text-[19px]">install_mobile</span>
-          </button>
-
-          {/* 프로젝트 정보 모달 */}
-          <button 
-            onClick={onOpenInfo}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
-            title="프로젝트 환경 정보"
-          >
-            <span className="material-symbols-outlined text-[19px]">cloud_done</span>
-          </button>
-
-          {/* 유저 프로필 아바타 버튼 */}
+          {/* 유저 프로필 아바타 버튼 (헤더에는 이 버튼 하나만 깔끔하게 유지) */}
           {user && (
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="relative w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0 ml-0.5"
+              className="relative w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0"
               title={`${user.displayName || user.email} 프로필`}
             >
               {user.photoURL ? (
@@ -192,7 +167,19 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* 프로필 팝업 내 어드민 계정 관리 버튼 */}
+            {/* 홈 화면에 앱 설치하기 버튼 (PWA) */}
+            <button
+              onClick={() => {
+                setShowProfileMenu(false);
+                handleInstallClick();
+              }}
+              className="w-full mb-1.5 py-2 px-3 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-[#c2e7ff]"
+            >
+              <span className="material-symbols-outlined text-[16px]">install_mobile</span>
+              홈 화면에 앱 설치하기
+            </button>
+
+            {/* 프로필 팝업 내 어드민 계정 관리 버튼 (관리자만 노출) */}
             {isAdmin && onOpenAdmin && (
               <button
                 onClick={() => {

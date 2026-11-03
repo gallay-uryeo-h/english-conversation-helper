@@ -63,16 +63,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem-4rem)] max-w-md mx-auto relative">
-      {/* 메시지 리스트 영역 */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {/* 스레드 시작 안내 */}
-        <div className="text-center my-2">
-          <span className="inline-block px-3 py-1 rounded-full bg-[#e8eefa] text-[11px] font-medium text-[#444746]">
-            {activeThread.title} • {activeThread.partnerName}
-          </span>
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] w-full relative">
+      {/* 1. 상단 대화 정보 리본 (좌우 끝까지 늘어난 풀 위드 리본) */}
+      <div className="w-full bg-[#eef4ff] border-b border-[#d2e3fc] px-4 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div 
+            className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ring-1 ring-black/5"
+            style={{ backgroundColor: activeThread.avatarBg, color: '#1f1f1f' }}
+          >
+            {activeThread.avatarText}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[12px] font-bold text-[#1f1f1f] truncate leading-tight">
+              {activeThread.title}
+            </p>
+            <p className="text-[10px] text-[#5f6368] truncate mt-0.5">
+              {activeThread.partnerName} • {activeThread.partnerRole || '회화 파트너'}
+            </p>
+          </div>
         </div>
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35] shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#188038] animate-pulse"></span>
+          대화 진행 중
+        </span>
+      </div>
 
+      {/* 2. 메시지 리스트 영역 */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
           return (
@@ -130,7 +147,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 스마트 답장 칩 목록 */}
+      {/* 3. 스마트 답장 칩 목록 */}
       <div className="px-3 py-1.5 bg-[#faf8ff] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
         <span className="text-[11px] font-medium text-[#5f6368] shrink-0">빠른 답장:</span>
         {smartReplies.map((reply, idx) => (
@@ -144,38 +161,37 @@ export const ChatView: React.FC<ChatViewProps> = ({
         ))}
       </div>
 
-      {/* 실시간 한글 입력 AI 영작 변환 추천 카드 (시안 2 핵심 UX) */}
+      {/* 4. 실시간 한글 입력 AI 영작 변환 추천 카드 (시안 2 핵심 UX) */}
       {recommendations.length > 0 && (
         <div className="mx-3 mb-2 p-2.5 bg-white border border-[#c2e7ff] rounded-2xl shadow-lg animate-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#e0e3e7]">
             <span className="text-[12px] font-bold text-[#1a73e8] flex items-center gap-1">
               <span className="material-symbols-outlined text-[16px]">magic_button</span>
-              실시간 AI 영작 추천 (탭하여 바로 전송)
+              실시간 AI 영작 추천
             </span>
-            <span className="text-[10px] text-[#5f6368] font-mono">3가지 톤 제안</span>
+            <span className="text-[11px] text-[#5f6368]">클릭 시 즉시 전송</span>
           </div>
 
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {recommendations.map((rec) => (
               <div
                 key={rec.id}
                 onClick={() => handleSelectRecommendation(rec)}
-                className="p-2 rounded-xl border border-[#e8f0fe] hover:border-[#1a73e8] hover:bg-[#f8fafd] cursor-pointer transition-all active:scale-[0.98]"
+                className="p-2.5 bg-[#f8fafd] hover:bg-[#eef4ff] active:bg-[#e2edff] border border-[#dadce0] rounded-xl cursor-pointer transition-all text-left"
               >
-                <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    rec.tone === 'Casual' ? 'bg-[#fef7e0] text-[#b06000]' :
-                    rec.tone === 'Polite' ? 'bg-[#e6f4ea] text-[#137333]' :
-                    rec.tone === 'Business' ? 'bg-[#e8f0fe] text-[#1a73e8]' :
-                    'bg-[#f3e8fd] text-[#9334e6]'
+                    rec.tone === 'Casual' ? 'bg-[#feefe3] text-[#b06000]' :
+                    rec.tone === 'Natural' ? 'bg-[#e6f4ea] text-[#137333]' :
+                    'bg-[#e8f0fe] text-[#1a73e8]'
                   }`}>
                     {rec.tone}
                   </span>
-                  <span className="text-[11px] text-[#5f6368] truncate">{rec.koreanMeaning}</span>
+                  <span className="text-[11px] text-[#5f6368]">{rec.koreanMeaning}</span>
                 </div>
                 <p className="text-[13px] font-semibold text-[#1f1f1f]">{rec.english}</p>
                 {rec.grammarTip && (
-                  <p className="text-[11px] text-[#00897b] font-medium mt-0.5">
+                  <p className="text-[11px] text-[#5f6368] mt-1 italic">
                     💡 {rec.grammarTip}
                   </p>
                 )}
@@ -185,65 +201,43 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* 하단 입력 폼 영역 */}
-      <div className="p-3 bg-white border-t border-[#e0e3e7]">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="flex items-center gap-2"
+      {/* 5. 하단 입력 바 */}
+      <div className="p-3 bg-[#f0f4f9] border-t border-[#e0e3e7] flex items-center gap-2">
+        <button
+          onClick={() => setIsRecording(!isRecording)}
+          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+            isRecording 
+              ? 'bg-[#d93025] text-white animate-pulse' 
+              : 'bg-white text-[#444746] hover:bg-black/5 border border-[#dadce0]'
+          }`}
+          title="음성 입력"
         >
-          {/* 음성 인식 모의 버튼 */}
-          <button
-            type="button"
-            onClick={() => setIsRecording(!isRecording)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isRecording 
-                ? 'bg-[#ba1a1a] text-white animate-pulse' 
-                : 'bg-[#f0f4f9] text-[#444746] hover:bg-[#e2e7ff]'
-            }`}
-            title="음성 입력"
-          >
-            <span className="material-symbols-outlined text-[20px]">
-              {isRecording ? 'graphic_eq' : 'mic'}
-            </span>
-          </button>
+          <span className="material-symbols-outlined text-[20px]">
+            {isRecording ? 'mic' : 'mic_none'}
+          </span>
+        </button>
 
-          {/* 텍스트 인풋 */}
-          <div className="flex-1 relative flex items-center">
-            <input
-              type="text"
-              placeholder="한글로 입력하면 실시간으로 영작을 추천해 드려요..."
-              value={inputText}
-              onChange={handleInputChange}
-              className="w-full h-10 pl-3.5 pr-9 bg-[#f0f4f9] rounded-full text-[13px] text-[#1f1f1f] outline-none border border-transparent focus:border-[#1a73e8] focus:bg-white transition-all"
-            />
-            {inputText && (
-              <button
-                type="button"
-                onClick={() => {
-                  setInputText('');
-                  setRecommendations([]);
-                }}
-                className="absolute right-3 text-[#5f6368]"
-              >
-                <span className="material-symbols-outlined text-[16px]">close</span>
-              </button>
-            )}
-          </div>
+        <input
+          type="text"
+          placeholder="한글 초안이나 영어 메시지를 입력하세요..."
+          value={inputText}
+          onChange={handleInputChange}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleSend();
+            }
+          }}
+          className="flex-1 px-4 py-2.5 bg-white border border-[#dadce0] rounded-full text-[14px] outline-none focus:border-[#1a73e8] placeholder-[#747775]"
+        />
 
-          {/* 전송 버튼 */}
-          <button
-            type="submit"
-            disabled={!inputText.trim()}
-            className="w-10 h-10 rounded-full bg-[#1a73e8] text-white flex items-center justify-center disabled:opacity-40 disabled:pointer-events-none hover:bg-[#1557b0] active:scale-95 transition-all shadow-sm"
-          >
-            <span className="material-symbols-outlined text-[20px]">send</span>
-          </button>
-        </form>
+        <button
+          onClick={() => handleSend()}
+          disabled={!inputText.trim()}
+          className="w-10 h-10 rounded-full bg-[#1a73e8] text-white flex items-center justify-center disabled:opacity-40 hover:bg-[#1557b0] active:scale-95 transition-all shadow-sm shrink-0"
+        >
+          <span className="material-symbols-outlined text-[20px]">send</span>
+        </button>
       </div>
     </div>
   );
 };
-

@@ -244,7 +244,6 @@ const MainApp: React.FC = () => {
           currentTab={currentTab} 
           activeThread={activeThread}
           onBack={handleBackFromChat}
-          onOpenInfo={() => setShowInfoModal(true)}
           onOpenAdmin={() => setShowAdminModal(true)}
         />
 
