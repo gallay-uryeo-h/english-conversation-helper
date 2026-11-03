@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Friend, GroupMember } from '../types';
+import { Friend, GroupMember, Thread } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 interface FriendsViewProps {
   friends: Friend[];
   groupMembers: GroupMember[];
-  onStartChat: (friend: Friend) => void;
+  threads: Thread[];
+  onStartChat: (friend: Friend, forceNew?: boolean) => void;
   onAddFriend: (friend: Friend) => void;
 }
 
 export const FriendsView: React.FC<FriendsViewProps> = ({
   friends,
   groupMembers,
+  threads,
   onStartChat,
   onAddFriend
 }) => {
@@ -128,50 +130,75 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
           <span className="text-[11px]">대화하기를 누르면 1:1 대화가 시작됩니다</span>
         </div>
 
-        {filteredFriends.map((friend) => (
-          <div 
-            key={friend.id}
-            className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex items-center justify-between gap-3"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div 
-                className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs"
-                style={{ backgroundColor: friend.avatarBg }}
-              >
-                {friend.photoURL ? (
-                  <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span>{friend.avatarText}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
-                    {friend.name}
-                  </h3>
-                  {friend.isAi && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
-                      AI
-                    </span>
+        {filteredFriends.map((friend) => {
+          const friendThreads = threads.filter(t => t.partnerName === friend.name);
+
+          return (
+            <div 
+              key={friend.id}
+              className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div 
+                  className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs"
+                  style={{ backgroundColor: friend.avatarBg }}
+                >
+                  {friend.photoURL ? (
+                    <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{friend.avatarText}</span>
                   )}
                 </div>
-                {friend.email && (
-                  <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
-                    {friend.email}
-                  </p>
-                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
+                      {friend.name}
+                    </h3>
+                    {friend.isAi && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
+                        AI
+                      </span>
+                    )}
+                  </div>
+                  {friend.email && (
+                    <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
+                      {friend.email}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <button
-              onClick={() => onStartChat(friend)}
-              className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
-            >
-              <span className="material-symbols-outlined text-[15px]">chat</span>
-              대화하기
-            </button>
-          </div>
-        ))}
+              {friendThreads.length > 0 ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => onStartChat(friend, false)}
+                    className="px-2.5 py-1.5 bg-[#f0f4f9] hover:bg-[#e2e7ff] text-[#1f1f1f] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
+                    title="기존 최근 대화방 이어하기"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">forum</span>
+                    <span>이어하기 ({friendThreads.length})</span>
+                  </button>
+                  <button
+                    onClick={() => onStartChat(friend, true)}
+                    className="px-2.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
+                    title="새 대화방(스레드) 개설"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">add</span>
+                    <span>새 대화</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => onStartChat(friend, true)}
+                  className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[15px]">chat</span>
+                  대화하기
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 4. 그룹 멤버 목록에서 찾기 모달 (복잡한 양식 없음!) */}

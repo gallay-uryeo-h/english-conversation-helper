@@ -104,23 +104,31 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // 친구 카드를 눌러 1:1 대화 시작
-  const handleStartChatWithFriend = async (friend: Friend) => {
-    // 1. 이미 해당 친구와의 대화방이 있는지 확인
-    const existing = threads.find(t => t.partnerName === friend.name);
-    if (existing) {
-      const msgs = await storageService.getMessages(existing.id);
-      openChatScreen(existing, msgs);
-      return;
+  // 친구 카드를 눌러 1:1 대화 시작 (한 친구와 멀티플 대화방 지원)
+  const handleStartChatWithFriend = async (friend: Friend, forceNew = false) => {
+    // 1. forceNew가 false이고 이미 해당 친구와의 대화방이 있으면 최근 방 열기
+    if (!forceNew) {
+      const existing = threads.find(t => t.partnerName === friend.name);
+      if (existing) {
+        const msgs = await storageService.getMessages(existing.id);
+        openChatScreen(existing, msgs);
+        return;
+      }
     }
 
-    // 2. 새 대화방 개설
+    // 2. 새 구글챗 스타일 스레드 개설
+    const greetingText = friend.isAi 
+      ? 'Hi there! Ready to practice English conversation today?' 
+      : `Hi! Let's chat in English! 😊`;
+
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
       partnerName: friend.name,
       avatarBg: friend.avatarBg,
       avatarText: friend.avatarText,
-      lastMessage: '대화가 시작되었습니다.',
+      lastMessage: greetingText,
+      lastSender: 'assistant',
+      messageCount: 1,
       updatedAt: Date.now()
     };
 
@@ -128,9 +136,7 @@ const MainApp: React.FC = () => {
     const greetingMsg: Message = {
       id: `msg-greeting-${Date.now()}`,
       sender: 'assistant',
-      text: friend.isAi 
-        ? 'Hi there! Ready to practice English conversation today?' 
-        : `Hi! Let's chat in English! 😊`,
+      text: greetingText,
       timestamp: Date.now()
     };
 
@@ -262,6 +268,7 @@ const MainApp: React.FC = () => {
                 <FriendsView 
                   friends={friends}
                   groupMembers={groupMembers}
+                  threads={threads}
                   onStartChat={handleStartChatWithFriend}
                   onAddFriend={handleAddFriend}
                 />

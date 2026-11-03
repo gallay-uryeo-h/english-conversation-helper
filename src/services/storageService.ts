@@ -295,6 +295,8 @@ export const storageService = {
         const target = threads.find(t => t.id === threadId);
         if (target) {
           target.lastMessage = message.text;
+          target.lastSender = message.sender;
+          target.messageCount = items.length;
           target.updatedAt = message.timestamp;
           await setDoc(threadsDocRef, { items: threads });
         }
@@ -303,6 +305,17 @@ export const storageService = {
       const existing: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
       existing.push(message);
       localStorage.setItem(localKey, JSON.stringify(existing));
+
+      const localThreadsKey = getLocalKey('app_threads');
+      const localThreads: Thread[] = JSON.parse(localStorage.getItem(localThreadsKey) || '[]');
+      const targetLocal = localThreads.find(t => t.id === threadId);
+      if (targetLocal) {
+        targetLocal.lastMessage = message.text;
+        targetLocal.lastSender = message.sender;
+        targetLocal.messageCount = existing.length;
+        targetLocal.updatedAt = message.timestamp;
+        localStorage.setItem(localThreadsKey, JSON.stringify(localThreads));
+      }
     }
   },
 

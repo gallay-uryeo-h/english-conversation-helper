@@ -5,6 +5,8 @@ export interface Thread {
   avatarText: string;
   lastMessage: string;
   updatedAt: number;
+  messageCount?: number;
+  lastSender?: 'user' | 'assistant';
   title?: string;
   partnerRole?: string;
   unreadCount?: number;
