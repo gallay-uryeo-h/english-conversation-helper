@@ -68,13 +68,22 @@ export interface SavedScript {
 export interface Friend {
   id: string;
   name: string;
-  role: string;
-  description: string;
+  email?: string;
+  photoURL?: string;
+  role?: string;
   avatarBg: string;
   avatarText: string;
-  category: 'daily' | 'business' | 'travel' | 'interview' | 'tutor';
-  greeting: string;
-  badge?: string;
+  isAi?: boolean;
+}
+
+export interface GroupMember {
+  id: string;
+  email: string;
+  name: string;
+  photoURL?: string;
+  avatarBg: string;
+  avatarText: string;
+  isAi?: boolean;
 }
 
 export type MainTab = 'friends' | 'threads' | 'chat' | 'analysis' | 'archive';

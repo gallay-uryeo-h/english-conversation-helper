@@ -3,68 +3,23 @@ import {
   ROOT_COLLECTION_NAME, 
   doc, 
   getDoc, 
-  setDoc
+  setDoc,
+  User
 } from '../firebase';
-import { Thread, Message, SavedExpression, SavedScript, Friend } from '../types';
+import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember } from '../types';
 
-// 기본 제공 AI 회화 친구 목록
-export const DEFAULT_FRIENDS: Friend[] = [
-  {
-    id: 'friend-alex',
-    name: '박서준 (Alex)',
-    role: 'Casual Native Friend',
-    description: '편안한 일상 스몰톡, 취미, 주말 계획을 나누는 친근한 원어민 친구',
-    avatarBg: '#d0e1fb',
-    avatarText: '준',
-    category: 'daily',
-    greeting: "Hey! What's up? How is your day going so far?",
-    badge: '일상 회화'
-  },
-  {
-    id: 'friend-chloe',
-    name: '최수아 (Chloe)',
-    role: 'Culture & Trend Enthusiast',
-    description: '음악, 영화, SNS 트렌드와 감각적인 요즘 영어 표현을 함께 이야기하는 친구',
-    avatarBg: '#f3e8fd',
-    avatarText: '수',
-    category: 'daily',
-    greeting: "Hello there! Found any great music or movies lately? I'd love to chat!",
-    badge: '문화/트렌드'
-  },
-  {
-    id: 'friend-sarah',
-    name: '김민지 (Sarah)',
-    role: 'Global Business Coach',
-    description: '비즈니스 이메일, 업무 협의, 회의 발표 및 인터뷰 표현을 코칭해주는 프로',
-    avatarBg: '#e8f0fe',
-    avatarText: '민',
-    category: 'business',
-    greeting: "Good to meet you. Are you preparing for any business discussions or presentations today?",
-    badge: '비즈니스'
-  },
-  {
-    id: 'friend-liam',
-    name: 'Liam Smith',
-    role: 'Travel & Roleplay Guide',
-    description: '공항 입국, 호텔 체크인, 카페/식당 주문 등 해외 여행 실전 롤플레잉 파트너',
-    avatarBg: '#feefe3',
-    avatarText: 'L',
-    category: 'travel',
-    greeting: "Welcome! Where are we traveling today? Ready to practice ordering or checking in?",
-    badge: '여행/롤플레잉'
-  },
-  {
-    id: 'friend-emma',
-    name: 'Emma Watson',
-    role: 'Friendly Beginner Tutor',
-    description: '쉬운 단어와 친절한 설명으로 영어가 낯선 분들도 자신감을 키워주는 다정한 튜터',
-    avatarBg: '#e6f4ea',
-    avatarText: 'E',
-    category: 'tutor',
-    greeting: "Hi! Don't worry about making mistakes at all. Let's take it slow and have fun!",
-    badge: '초보자 추천'
-  }
-];
+// 기본 제공 AI 영어 회화 코치
+export const DEFAULT_AI_FRIEND: Friend = {
+  id: 'friend-ai-coach',
+  name: 'AI 영어 회화 코치',
+  role: '실시간 AI 스몰톡 & 피드백 도우미',
+  email: 'ai.coach@helper',
+  avatarBg: '#d0e1fb',
+  avatarText: 'AI',
+  isAi: true
+};
+
+export const DEFAULT_FRIENDS: Friend[] = [DEFAULT_AI_FRIEND];
 
 let currentUserId: string | null = null;
 
@@ -76,13 +31,111 @@ const getLocalKey = (baseKey: string) => {
   return currentUserId ? `${baseKey}_${currentUserId}` : baseKey;
 };
 
+// 이메일 주소로부터 아바타 색상과 이니셜 생성
+export const generateAvatarInfo = (email: string, name?: string) => {
+  const colors = ['#d0e1fb', '#f3e8fd', '#e8f0fe', '#feefe3', '#e6f4ea', '#fce8e6'];
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = colors[Math.abs(hash) % colors.length];
+  const char = (name || email).charAt(0).toUpperCase();
+  return { avatarBg: color, avatarText: char };
+};
+
 export const storageService = {
   // 현재 로그인한 사용자 ID 설정 (사용자별 격리 보장)
   setUserId(uid: string | null) {
     currentUserId = uid;
   },
 
-  // 친구 목록 가져오기 (기본 친구 + 사용자가 추가한 친구)
+  // 사용자 로그인 시 그룹 디렉토리에 내 프로필 정보 등록/갱신
+  async recordUserProfile(user: User): Promise<void> {
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, "group_directory");
+      const snap = await getDoc(docRef);
+      let directory: Record<string, { name: string; photoURL?: string; email: string }> = {};
+      if (snap.exists() && snap.data().members) {
+        directory = snap.data().members;
+      }
+      directory[user.uid] = {
+        name: user.displayName || user.email?.split('@')[0] || '사용자',
+        photoURL: user.photoURL || undefined,
+        email: (user.email || '').toLowerCase()
+      };
+      await setDoc(docRef, { members: directory });
+    } catch (e) {
+      console.warn("Group directory update error:", e);
+    }
+  },
+
+  // 전체 그룹 멤버 목록 가져오기 (허용된 이메일 목록 기반)
+  async getGroupMembers(allowedEmails: string[]): Promise<GroupMember[]> {
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, "group_directory");
+      const snap = await getDoc(docRef);
+      const directory: Record<string, { name: string; photoURL?: string; email: string }> = 
+        (snap.exists() && snap.data().members) ? snap.data().members : {};
+
+      const dirList = Object.values(directory);
+
+      // 허용된 모든 이메일을 그룹 멤버로 변환
+      const members: GroupMember[] = allowedEmails.map((email) => {
+        const lower = email.trim().toLowerCase();
+        const matched = dirList.find(d => d.email.toLowerCase() === lower);
+        const name = matched?.name || lower.split('@')[0];
+        const { avatarBg, avatarText } = generateAvatarInfo(lower, name);
+
+        return {
+          id: `member-${lower}`,
+          email: lower,
+          name,
+          photoURL: matched?.photoURL,
+          avatarBg,
+          avatarText,
+          isAi: false
+        };
+      });
+
+      // AI 코치를 항상 최상단에 포함
+      return [
+        {
+          id: DEFAULT_AI_FRIEND.id,
+          name: DEFAULT_AI_FRIEND.name,
+          email: DEFAULT_AI_FRIEND.email || '',
+          avatarBg: DEFAULT_AI_FRIEND.avatarBg,
+          avatarText: DEFAULT_AI_FRIEND.avatarText,
+          isAi: true
+        },
+        ...members
+      ];
+    } catch (e) {
+      console.warn("getGroupMembers error, fallback:", e);
+      return [
+        {
+          id: DEFAULT_AI_FRIEND.id,
+          name: DEFAULT_AI_FRIEND.name,
+          email: DEFAULT_AI_FRIEND.email || '',
+          avatarBg: DEFAULT_AI_FRIEND.avatarBg,
+          avatarText: DEFAULT_AI_FRIEND.avatarText,
+          isAi: true
+        },
+        ...allowedEmails.map(em => {
+          const { avatarBg, avatarText } = generateAvatarInfo(em);
+          return {
+            id: `member-${em}`,
+            name: em.split('@')[0],
+            email: em,
+            avatarBg,
+            avatarText,
+            isAi: false
+          };
+        })
+      ];
+    }
+  },
+
+  // 현재 사용자가 추가/대화 중인 친구 목록 가져오기
   async getFriends(): Promise<Friend[]> {
     const docId = getDocId("friends_data");
     const localKey = getLocalKey('app_friends');
@@ -93,19 +146,19 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Friend[];
       }
-      // 최초 실행 시 기본 친구 리스트 등록
-      await setDoc(docRef, { items: DEFAULT_FRIENDS });
-      return DEFAULT_FRIENDS;
+      // 최초 기본값: AI 코치 등록
+      const initial = [DEFAULT_AI_FRIEND];
+      await setDoc(docRef, { items: initial });
+      return initial;
     } catch (e) {
-      console.warn("Firestore friends fetch error, fallback to local:", e);
+      console.warn("Friends fetch error, fallback to local:", e);
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem(localKey, JSON.stringify(DEFAULT_FRIENDS));
-      return DEFAULT_FRIENDS;
+      return [DEFAULT_AI_FRIEND];
     }
   },
 
-  // 새 친구 추가
+  // 친구 목록에 추가 (중복 방지)
   async saveFriend(friend: Friend): Promise<void> {
     const docId = getDocId("friends_data");
     const localKey = getLocalKey('app_friends');
@@ -113,20 +166,24 @@ export const storageService = {
     try {
       const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(docRef);
-      let items: Friend[] = DEFAULT_FRIENDS;
+      let items: Friend[] = [DEFAULT_AI_FRIEND];
       if (snap.exists() && snap.data().items) {
         items = snap.data().items;
       }
-      items = [friend, ...items];
-      await setDoc(docRef, { items });
+      if (!items.some(f => f.id === friend.id || (f.email && f.email === friend.email))) {
+        items = [friend, ...items];
+        await setDoc(docRef, { items });
+      }
     } catch (e) {
-      const local: Friend[] = JSON.parse(localStorage.getItem(localKey) || JSON.stringify(DEFAULT_FRIENDS));
-      local.unshift(friend);
-      localStorage.setItem(localKey, JSON.stringify(local));
+      const local: Friend[] = JSON.parse(localStorage.getItem(localKey) || JSON.stringify([DEFAULT_AI_FRIEND]));
+      if (!local.some(f => f.id === friend.id)) {
+        local.unshift(friend);
+        localStorage.setItem(localKey, JSON.stringify(local));
+      }
     }
   },
 
-  // 스레드(대화방) 목록 가져오기 (실제 사용자 데이터만 반환, mock 제외)
+  // 스레드(대화방) 목록 가져오기
   async getThreads(): Promise<Thread[]> {
     const docId = getDocId("threads_data");
     const localKey = getLocalKey('app_threads');
@@ -137,18 +194,16 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Thread[];
       }
-      // 최초 사용자: 빈 배열로 초기화 (가짜 mock 데이터 제거)
       await setDoc(threadsDocRef, { items: [] });
       return [];
     } catch (e) {
-      console.warn("Firestore threads fetch error, fallback to local:", e);
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
       return [];
     }
   },
 
-  // 스레드 생성 또는 업데이트
+  // 스레드 저장
   async saveThread(thread: Thread): Promise<void> {
     const threadsDocId = getDocId("threads_data");
     const localKey = getLocalKey('app_threads');
@@ -211,7 +266,6 @@ export const storageService = {
       }
       return [];
     } catch (e) {
-      console.warn("Firestore message fetch error, fallback to local:", e);
       const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
       return [];
@@ -247,7 +301,6 @@ export const storageService = {
         }
       }
     } catch (e) {
-      console.warn("Firestore saveMessage fallback to local:", e);
       const existing: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
       existing.push(message);
       localStorage.setItem(localKey, JSON.stringify(existing));

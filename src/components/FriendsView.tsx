@@ -1,76 +1,65 @@
 import React, { useState } from 'react';
-import { Friend } from '../types';
+import { Friend, GroupMember } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 interface FriendsViewProps {
   friends: Friend[];
+  groupMembers: GroupMember[];
   onStartChat: (friend: Friend) => void;
   onAddFriend: (friend: Friend) => void;
 }
 
 export const FriendsView: React.FC<FriendsViewProps> = ({
   friends,
+  groupMembers,
   onStartChat,
   onAddFriend
 }) => {
   const { user, appTarget } = useAuth();
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
 
-  // 새 친구 생성 폼 상태
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newGreeting, setNewGreeting] = useState('');
-  const [newCategory, setNewCategory] = useState<'daily' | 'business' | 'travel' | 'interview' | 'tutor'>('daily');
+  const isFamily = appTarget === 'family';
+  const groupTitle = isFamily ? '가족 그룹' : '학교 그룹';
 
-  const categories = [
-    { id: 'all', label: '전체' },
-    { id: 'daily', label: '일상 회화' },
-    { id: 'business', label: '비즈니스' },
-    { id: 'travel', label: '여행/롤플레잉' },
-    { id: 'tutor', label: '초보자 튜터' }
-  ];
+  // 내 계정을 제외한 그룹 멤버 목록
+  const otherGroupMembers = groupMembers.filter(m => 
+    !m.isAi && m.email.toLowerCase() !== (user?.email || '').toLowerCase()
+  );
 
-  const filteredFriends = friends.filter((f) => {
-    const matchesCategory = selectedCategory === 'all' || f.category === selectedCategory;
-    const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          f.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          f.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // 모달 내 검색 필터링된 멤버
+  const filteredModalMembers = otherGroupMembers.filter(m => 
+    m.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
+    m.email.toLowerCase().includes(modalSearch.toLowerCase())
+  );
 
-  const handleCreateFriend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
+  // 메인 화면 친구 검색 필터링
+  const filteredFriends = friends.filter(f => 
+    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (f.email && f.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
-    const colors = ['#d0e1fb', '#f3e8fd', '#e8f0fe', '#feefe3', '#e6f4ea', '#fce8e6'];
-    const randomBg = colors[Math.floor(Math.random() * colors.length)];
-
-    const created: Friend = {
-      id: `friend-custom-${Date.now()}`,
-      name: newName.trim(),
-      role: newRole.trim() || 'Custom Conversation Partner',
-      description: newDesc.trim() || '나만의 맞춤형 회화 파트너',
-      avatarBg: randomBg,
-      avatarText: newName.trim().charAt(0).toUpperCase(),
-      category: newCategory,
-      greeting: newGreeting.trim() || `Hi! I'm ${newName.trim()}. Let's practice English together!`,
-      badge: '사용자 지정'
+  const handleSelectMember = (member: GroupMember) => {
+    const friendObj: Friend = {
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      photoURL: member.photoURL,
+      avatarBg: member.avatarBg,
+      avatarText: member.avatarText,
+      role: isFamily ? '가족 멤버' : '학교 구성원',
+      isAi: false
     };
 
-    onAddFriend(created);
-    setShowAddModal(false);
-    setNewName('');
-    setNewRole('');
-    setNewDesc('');
-    setNewGreeting('');
+    onAddFriend(friendObj);
+    setShowMemberModal(false);
+    onStartChat(friendObj);
   };
 
   return (
     <div className="flex-1 pb-24">
-      {/* 1. 상단 내 프로필 카드 */}
+      {/* 1. 상단 내 프로필 & 그룹 정보 카드 */}
       <div className="bg-gradient-to-b from-[#e8f0fe] to-[#f8fafd] p-4 border-b border-[#dadce0]">
         <div className="flex items-center gap-3 bg-white p-3.5 rounded-2xl shadow-sm border border-[#e0e3e7]">
           <div className="w-12 h-12 rounded-full overflow-hidden bg-[#1a73e8] text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-inner">
@@ -78,7 +67,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
               <img 
                 src={user.photoURL} 
                 alt={user.displayName || '내 프로필'} 
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover" 
                 referrerPolicy="no-referrer"
               />
             ) : (
@@ -88,26 +77,26 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1f1f1f] truncate">
-                {user?.displayName || '영어 학습자'}
+                {user?.displayName || user?.email?.split('@')[0]}
               </h2>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                appTarget === 'family' ? 'bg-[#e8f0fe] text-[#1967d2]' : 'bg-[#e6f4ea] text-[#137333]'
+                isFamily ? 'bg-[#e8f0fe] text-[#1967d2]' : 'bg-[#e6f4ea] text-[#137333]'
               }`}>
-                {appTarget === 'family' ? '가족' : '학교'}
+                {groupTitle}
               </span>
             </div>
             <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
               {user?.email}
             </p>
             <p className="text-[11px] text-[#1a73e8] font-medium mt-1 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px]">military_tech</span>
-              매일 10분 실시간 영어 스몰톡 도전 중!
+              <span className="material-symbols-outlined text-[14px]">group</span>
+              우리 {groupTitle} 등록 멤버: {groupMembers.length - 1}명
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2. 친구 검색 & 새 친구 추가 액션 바 */}
+      {/* 2. 검색 및 그룹 멤버에서 친구 추가 버튼 */}
       <div className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
@@ -116,7 +105,7 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
             </span>
             <input 
               type="text"
-              placeholder="회화 친구 이름 또는 분야 검색..."
+              placeholder="친구 이름 또는 이메일 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-white border border-[#dadce0] rounded-xl text-xs placeholder-[#747775] focus:outline-none focus:border-[#1a73e8]"
@@ -124,202 +113,178 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
           </div>
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => setShowMemberModal(true)}
             className="h-9 px-3 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-95 shrink-0"
           >
             <span className="material-symbols-outlined text-[16px]">person_add</span>
-            친구 추가
+            그룹 멤버 추가
           </button>
-        </div>
-
-        {/* 카테고리 필터 칩 */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedCategory === cat.id
-                  ? 'bg-[#001d35] text-white'
-                  : 'bg-[#f1f3f4] text-[#444746] hover:bg-[#e3e3e3]'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* 3. 회화 친구 목록 */}
+      {/* 3. 회화 친구 리스트 */}
       <div className="px-4 space-y-3">
         <div className="flex items-center justify-between text-xs text-[#5f6368] font-medium px-1">
-          <span>AI 회화 파트너 ({filteredFriends.length}명)</span>
-          <span className="text-[11px]">대화하기를 누르면 1:1 채팅이 시작됩니다</span>
+          <span>나의 회화 친구 ({filteredFriends.length}명)</span>
+          <span className="text-[11px]">대화하기를 누르면 1:1 대화가 시작됩니다</span>
         </div>
 
         {filteredFriends.map((friend) => (
           <div 
             key={friend.id}
-            className="bg-white rounded-2xl p-4 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex flex-col gap-3"
+            className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex items-center justify-between gap-3"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <div 
-                  className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-sm"
-                  style={{ backgroundColor: friend.avatarBg }}
-                >
-                  {friend.avatarText}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[14px] font-bold text-[#1f1f1f]">
-                      {friend.name}
-                    </h3>
-                    {friend.badge && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#e8f0fe] text-[#1a73e8]">
-                        {friend.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[12px] font-medium text-[#444746] mt-0.5">
-                    {friend.role}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onStartChat(friend)}
-                className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
+            <div className="flex items-center gap-3 min-w-0">
+              <div 
+                className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs"
+                style={{ backgroundColor: friend.avatarBg }}
               >
-                <span className="material-symbols-outlined text-[15px]">chat</span>
-                대화하기
-              </button>
+                {friend.photoURL ? (
+                  <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{friend.avatarText}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
+                    {friend.name}
+                  </h3>
+                  {friend.isAi ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
+                      AI 도우미
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f1f3f4] text-[#444746]">
+                      {isFamily ? '가족' : '학교'}
+                    </span>
+                  )}
+                </div>
+                {friend.email && (
+                  <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
+                    {friend.email}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <p className="text-[12px] text-[#5f6368] leading-relaxed bg-[#f8fafd] p-2.5 rounded-xl border border-[#edf2f7]">
-              {friend.description}
-            </p>
-
-            {/* 첫인사 미리보기 */}
-            <div className="flex items-start gap-1.5 text-[11px] text-[#444746] italic">
-              <span className="material-symbols-outlined text-[14px] text-[#1a73e8] shrink-0 mt-0.5">format_quote</span>
-              <span className="truncate">"{friend.greeting}"</span>
-            </div>
+            <button
+              onClick={() => onStartChat(friend)}
+              className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[15px]">chat</span>
+              대화하기
+            </button>
           </div>
         ))}
-
-        {filteredFriends.length === 0 && (
-          <div className="py-16 text-center text-[#5f6368] space-y-2">
-            <span className="material-symbols-outlined text-[36px] text-[#9aa0a6]">person_search</span>
-            <p className="text-xs">조건에 맞는 회화 친구가 없습니다.</p>
-          </div>
-        )}
       </div>
 
-      {/* 4. 새 친구 생성 모달 */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+      {/* 4. 그룹 멤버 목록에서 찾기 모달 (복잡한 양식 없음!) */}
+      {showMemberModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            
+            {/* 모달 상단 */}
             <div className="flex items-center justify-between pb-2 border-b border-[#e0e3e7]">
-              <h3 className="text-[16px] font-bold text-[#1f1f1f] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#1a73e8]">person_add</span>
-                새 AI 회화 친구 만들기
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-[#5f6368]">
+              <div>
+                <h3 className="text-[16px] font-bold text-[#1f1f1f] flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#1a73e8]">group</span>
+                  우리 {groupTitle} 멤버 목록
+                </h3>
+                <p className="text-[11px] text-[#5f6368] mt-0.5">
+                  대화하고 싶은 구성원을 선택하세요
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowMemberModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5f6368] hover:bg-black/5"
+              >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateFriend} className="space-y-3.5 text-left">
-              <div>
-                <label className="text-[11px] font-semibold text-[#444746] block mb-1">
-                  친구 이름 (영어/한국어) *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  placeholder="예: David (카페 바리스타)"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#dadce0] rounded-xl text-xs focus:outline-none focus:border-[#1a73e8]"
-                />
-              </div>
+            {/* 멤버 검색창 */}
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#747775] text-[16px]">
+                search
+              </span>
+              <input 
+                type="text"
+                placeholder="이름 또는 이메일 검색..."
+                value={modalSearch}
+                onChange={(e) => setModalSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-[#f8fafd] border border-[#dadce0] rounded-xl text-xs outline-none focus:border-[#1a73e8]"
+              />
+            </div>
 
-              <div>
-                <label className="text-[11px] font-semibold text-[#444746] block mb-1">
-                  역할 및 성향
-                </label>
-                <input 
-                  type="text"
-                  placeholder="예: Friendly London Barista"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#dadce0] rounded-xl text-xs focus:outline-none focus:border-[#1a73e8]"
-                />
-              </div>
+            {/* 멤버 목록 리스트 */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {filteredModalMembers.map((member) => {
+                const isAlreadyFriend = friends.some(f => f.email && f.email.toLowerCase() === member.email.toLowerCase());
 
-              <div>
-                <label className="text-[11px] font-semibold text-[#444746] block mb-1">
-                  분야 (카테고리)
-                </label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-[#dadce0] rounded-xl text-xs focus:outline-none focus:border-[#1a73e8] bg-white"
-                >
-                  <option value="daily">일상 회화</option>
-                  <option value="business">비즈니스</option>
-                  <option value="travel">여행/롤플레잉</option>
-                  <option value="tutor">초보자 튜터</option>
-                </select>
-              </div>
+                return (
+                  <div 
+                    key={member.id}
+                    className="p-3 bg-white border border-[#e0e3e7] hover:border-[#1a73e8]/40 rounded-2xl flex items-center justify-between gap-2.5 transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div 
+                        className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center font-bold text-xs text-[#1f1f1f] shrink-0"
+                        style={{ backgroundColor: member.avatarBg }}
+                      >
+                        {member.photoURL ? (
+                          <img src={member.photoURL} alt={member.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{member.avatarText}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-[#1f1f1f] truncate">
+                          {member.name}
+                        </p>
+                        <p className="text-[11px] text-[#5f6368] truncate font-mono">
+                          {member.email}
+                        </p>
+                      </div>
+                    </div>
 
-              <div>
-                <label className="text-[11px] font-semibold text-[#444746] block mb-1">
-                  첫 인사말 (영문)
-                </label>
-                <input 
-                  type="text"
-                  placeholder="예: Welcome to our cafe! What can I get for you?"
-                  value={newGreeting}
-                  onChange={(e) => setNewGreeting(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#dadce0] rounded-xl text-xs focus:outline-none focus:border-[#1a73e8]"
-                />
-              </div>
+                    <button
+                      onClick={() => handleSelectMember(member)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-colors ${
+                        isAlreadyFriend 
+                          ? 'bg-[#f1f3f4] text-[#1f1f1f] hover:bg-[#e3e3e3]' 
+                          : 'bg-[#1a73e8] text-white hover:bg-[#1557b0] shadow-xs'
+                      }`}
+                    >
+                      {isAlreadyFriend ? '대화하기' : '선택'}
+                    </button>
+                  </div>
+                );
+              })}
 
-              <div>
-                <label className="text-[11px] font-semibold text-[#444746] block mb-1">
-                  소개 설명
-                </label>
-                <textarea 
-                  rows={2}
-                  placeholder="예: 런던 카페에서 주문할 때 유용한 표현을 연습해볼 수 있는 친구"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#dadce0] rounded-xl text-xs focus:outline-none focus:border-[#1a73e8] resize-none"
-                />
-              </div>
+              {filteredModalMembers.length === 0 && (
+                <div className="py-12 text-center text-xs text-[#5f6368] space-y-2">
+                  <span className="material-symbols-outlined text-[32px] text-[#9aa0a6]">person_search</span>
+                  <p>일치하는 그룹 멤버가 없습니다.</p>
+                  <p className="text-[11px] text-[#80868b]">
+                    우측 상단 프로필 메뉴 &gt; [계정 관리]에서<br />새 멤버 이메일을 등록할 수 있습니다.
+                  </p>
+                </div>
+              )}
+            </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2.5 bg-[#f1f3f4] text-[#444746] font-semibold rounded-xl text-xs hover:bg-[#e3e3e3]"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-[#1a73e8] text-white font-semibold rounded-xl text-xs hover:bg-[#1557b0] shadow-sm"
-                >
-                  친구 추가
-                </button>
-              </div>
-            </form>
+            {/* 하단 닫기 */}
+            <div className="pt-2 border-t border-[#e0e3e7] flex justify-end">
+              <button
+                onClick={() => setShowMemberModal(false)}
+                className="w-full py-2 bg-[#f1f3f4] text-[#444746] rounded-xl text-xs font-semibold hover:bg-[#e3e3e3]"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
-

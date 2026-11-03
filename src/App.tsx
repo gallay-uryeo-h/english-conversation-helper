@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MainTab, Thread, Message, SavedExpression, SavedScript, RecommendationCard, Friend } from './types';
+import { MainTab, Thread, Message, SavedExpression, SavedScript, RecommendationCard, Friend, GroupMember } from './types';
 import { storageService, DEFAULT_FRIENDS } from './services/storageService';
 import { aiService } from './services/aiService';
 import { Header } from './components/Header';
@@ -18,6 +18,7 @@ const MainApp: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<MainTab>('friends');
   const [prevTab, setPrevTab] = useState<MainTab>('friends');
   const [friends, setFriends] = useState<Friend[]>(DEFAULT_FRIENDS);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -48,6 +49,11 @@ const MainApp: React.FC = () => {
         // 로그인한 사용자 UID로 데이터 스토리지 격리
         storageService.setUserId(user.uid);
 
+        // 0. 사용자 프로필 그룹 디렉토리 동기화 및 그룹 멤버 목록 로드
+        await storageService.recordUserProfile(user);
+        const members = await storageService.getGroupMembers(allowedEmails);
+        setGroupMembers(members);
+
         // 1. 친구 목록 로드
         const loadedFriends = await storageService.getFriends();
         setFriends(loadedFriends);
@@ -76,7 +82,7 @@ const MainApp: React.FC = () => {
       }
     }
     initData();
-  }, [user?.uid]);
+  }, [user?.uid, allowedEmails]);
 
   // 대화 화면 진입 헬퍼 (히스토리 스택에 push하여 뒤로가기 지원)
   const openChatScreen = (thread: Thread, msgs: Message[]) => {
@@ -113,19 +119,23 @@ const MainApp: React.FC = () => {
       id: `thread-${Date.now()}`,
       title: `${friend.name}와의 스몰톡`,
       partnerName: friend.name,
-      partnerRole: friend.role,
+      partnerRole: friend.role || '회화 파트너',
       avatarBg: friend.avatarBg,
       avatarText: friend.avatarText,
-      lastMessage: friend.greeting,
+      lastMessage: friend.isAi 
+        ? '안녕하세요! 영어 대화 연습을 시작해볼까요?' 
+        : '대화가 시작되었습니다.',
       updatedAt: Date.now(),
-      category: friend.category === 'tutor' ? 'daily' : friend.category
+      category: 'daily'
     };
 
     // 3. 친구의 첫 인사 메시지 자동 생성
     const greetingMsg: Message = {
       id: `msg-greeting-${Date.now()}`,
       sender: 'assistant',
-      text: friend.greeting,
+      text: friend.isAi 
+        ? 'Hi there! Ready to practice English conversation today?' 
+        : `Hi! Let's chat in English! 😊`,
       timestamp: Date.now()
     };
 
@@ -260,6 +270,7 @@ const MainApp: React.FC = () => {
               {currentTab === 'friends' && (
                 <FriendsView 
                   friends={friends}
+                  groupMembers={groupMembers}
                   onStartChat={handleStartChatWithFriend}
                   onAddFriend={handleAddFriend}
                 />
