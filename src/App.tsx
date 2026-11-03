@@ -8,8 +8,11 @@ import { ThreadsView } from './components/ThreadsView';
 import { ChatView } from './components/ChatView';
 import { AnalysisView } from './components/AnalysisView';
 import { ArchiveView } from './components/ArchiveView';
+import { LoginView } from './components/LoginView';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-export const App: React.FC = () => {
+const MainApp: React.FC = () => {
+  const { user, appTarget, allowedEmails, allowedDomains } = useAuth();
   const [currentTab, setCurrentTab] = useState<MainTab>('threads');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -20,17 +23,24 @@ export const App: React.FC = () => {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 초기 데이터 로드 (Firestore)
+  // 사용자별 데이터 로드 (Firestore)
   useEffect(() => {
     async function initData() {
+      if (!user) return;
       try {
         setLoading(true);
+        // 로그인한 사용자 UID로 데이터 스토리지 격리
+        storageService.setUserId(user.uid);
+
         const fetchedThreads = await storageService.getThreads();
         setThreads(fetchedThreads);
         if (fetchedThreads.length > 0) {
           setActiveThread(fetchedThreads[0]);
           const msgs = await storageService.getMessages(fetchedThreads[0].id);
           setMessages(msgs);
+        } else {
+          setActiveThread(null);
+          setMessages([]);
         }
         const expList = await storageService.getSavedExpressions();
         setExpressions(expList);
@@ -43,7 +53,7 @@ export const App: React.FC = () => {
       }
     }
     initData();
-  }, []);
+  }, [user?.uid]);
 
   // 활성 스레드 변경 시 해당 스레드의 메시지 로드
   const handleSelectThread = async (thread: Thread) => {
@@ -98,7 +108,7 @@ export const App: React.FC = () => {
     setSelectedMessageForAnalysis(userMsg);
     await storageService.saveMessage(activeThread.id, userMsg);
 
-    // 2. AI 파트너의 응답 생성 (실시간 느낌)
+    // 2. AI 파트너의 응답 생성
     setTimeout(async () => {
       const replyText = aiService.generateAssistantReply(activeThread.partnerName, text);
       const assistantMsg: Message = {
@@ -135,7 +145,7 @@ export const App: React.FC = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 text-[#5f6368]">
               <div className="w-8 h-8 border-3 border-[#1a73e8] border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p className="text-[13px] font-medium">Firestore 데이터 로드 중...</p>
+              <p className="text-[13px] font-medium">내 대화 데이터 로드 중...</p>
             </div>
           ) : (
             <>
@@ -180,7 +190,7 @@ export const App: React.FC = () => {
 
         {/* 하단 내비게이션 바 */}
         <BottomNav 
-          currentTab={currentTab}
+          currentTab={currentTab} 
           onSelectTab={(tab) => setCurrentTab(tab)}
         />
       </div>
@@ -192,7 +202,7 @@ export const App: React.FC = () => {
             <div className="flex items-center justify-between pb-2 border-b border-[#e0e3e7]">
               <h3 className="text-[16px] font-bold text-[#1f1f1f] flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#1a73e8]">cloud_done</span>
-                PWA & Firestore 설정
+                프로젝트 & 인증 정보
               </h3>
               <button onClick={() => setShowInfoModal(false)} className="text-[#5f6368]">
                 <span className="material-symbols-outlined text-[20px]">close</span>
@@ -202,19 +212,17 @@ export const App: React.FC = () => {
             <div className="space-y-3 text-[13px] text-[#444746] leading-relaxed">
               <div className="p-3 bg-[#e8f0fe] rounded-2xl">
                 <span className="text-[11px] font-bold text-[#1a73e8] block mb-1">
-                  🔒 Firestore 단일 컬렉션 정책 준수
+                  🔒 Firestore 단일 컬렉션 + 계정별 격리
                 </span>
                 <p className="text-[12px]">
-                  다른 앱과의 충돌 방지를 위해 단일 루트 컬렉션인 
-                  <code className="bg-white px-1.5 py-0.5 rounded text-[#001d35] font-mono ml-1">english-conversation-helper</code>
-                  하위에서만 모든 데이터를 격리 관리합니다.
+                  루트 컬렉션 <code className="bg-white px-1.5 py-0.5 rounded text-[#001d35] font-mono">english-conversation-helper</code> 하위에서 로그인한 사용자의 UID별로 데이터를 완벽하게 격리 저장합니다.
                 </p>
               </div>
 
-              <div>
-                <p><strong>프로젝트:</strong> studio-2726051254-c02c9</p>
-                <p><strong>디자인 테마:</strong> Stitch Linguistic Flow (Inter / Hanken Grotesk)</p>
-                <p><strong>PWA:</strong> 오프라인 캐싱 & 웹앱 설치 지원</p>
+              <div className="space-y-1.5 text-xs">
+                <p><strong>접속 계정:</strong> {user?.email}</p>
+                <p><strong>실행 모드:</strong> {appTarget === 'family' ? '🏡 가족 전용 (family-eb4f8)' : '🏫 학교 전용 (studio-2726051254-c02c9)'}</p>
+                <p><strong>접근 제한 정책:</strong> {appTarget === 'family' ? `허용 이메일 (${allowedEmails.join(', ')})` : `허용 도메인 (*@${allowedDomains.join(', ')})`}</p>
               </div>
             </div>
 
@@ -231,5 +239,31 @@ export const App: React.FC = () => {
   );
 };
 
-export default App;
+const AppContent: React.FC = () => {
+  const { user, loading } = useAuth();
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafd] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-3 border-[#1a73e8] border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p className="text-[13px] text-[#5f6368] font-medium">안전한 로그인 상태 확인 중...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginView />;
+  }
+
+  return <MainApp />;
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+};
+
+export default App;

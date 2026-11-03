@@ -138,17 +138,35 @@ const INITIAL_SCRIPTS: SavedScript[] = [
     dialogue: [
       { speaker: 'Alex', isUser: false, english: 'Look at that rain pouring down! Did you bring an umbrella?', korean: '비 오는 것 좀 봐! 우산 챙겨왔어?' },
       { speaker: 'You', isUser: true, english: 'Nope, I got totally soaked running across the street!', korean: '아니, 길 건너오면서 완전히 흠뻑 젖었어!' },
-      { speaker: 'Alex', isUser: false, english: 'Oh no! Grab a warm tea, that will definitely turn your day around.', korean: '저런! 따뜻한 차 한 잔 마셔, 기분이 훨씬 나아질 거야.' },
-      { speaker: 'You', isUser: true, english: 'That sounds like heaven right now.', korean: '지금 딱 필요했던 거야.' }
+      { speaker: 'Alex', isUser: false, english: 'Oh no! You must be freezing. Go grab a hot drink, my treat.', korean: '이런! 엄청 춥겠다. 따뜻한 음료 한 잔 마셔, 내가 살게.' },
+      { speaker: 'You', isUser: true, english: 'Thanks, a hot vanilla latte will definitely turn my day around.', korean: '고마워, 따뜻한 바닐라 라떼 마시면 기분 완전 좋아질 것 같아.' }
     ]
   }
 ];
 
+let currentUserId: string | null = null;
+
+const getDocId = (baseName: string) => {
+  return currentUserId ? `${baseName}_${currentUserId}` : baseName;
+};
+
+const getLocalKey = (baseKey: string) => {
+  return currentUserId ? `${baseKey}_${currentUserId}` : baseKey;
+};
+
 export const storageService = {
+  // 현재 로그인한 사용자 ID 설정 (사용자별 격리 보장)
+  setUserId(uid: string | null) {
+    currentUserId = uid;
+  },
+
   // 스레드 목록 가져오기 (Firestore 실패 시 로컬 스토리지 Fallback 지원)
   async getThreads(): Promise<Thread[]> {
+    const docId = getDocId("threads_data");
+    const localKey = getLocalKey('app_threads');
+
     try {
-      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, "threads_data");
+      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(threadsDocRef);
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Thread[];
@@ -158,17 +176,20 @@ export const storageService = {
       return INITIAL_THREADS;
     } catch (e) {
       console.warn("Firestore access error, falling back to local memory:", e);
-      const local = localStorage.getItem('app_threads');
+      const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem('app_threads', JSON.stringify(INITIAL_THREADS));
+      localStorage.setItem(localKey, JSON.stringify(INITIAL_THREADS));
       return INITIAL_THREADS;
     }
   },
 
   // 특정 스레드의 메시지 목록 가져오기
   async getMessages(threadId: string): Promise<Message[]> {
+    const docId = getDocId(`messages_${threadId}`);
+    const localKey = getLocalKey(`app_messages_${threadId}`);
+
     try {
-      const msgDocRef = doc(db, ROOT_COLLECTION_NAME, `messages_${threadId}`);
+      const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
       if (snap.exists() && snap.data().items) {
         return snap.data().items as Message[];
@@ -178,19 +199,22 @@ export const storageService = {
       return initial;
     } catch (e) {
       console.warn("Firestore message fetch error, falling back to local:", e);
-      const key = `app_messages_${threadId}`;
-      const local = localStorage.getItem(key);
+      const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
       const initial = INITIAL_MESSAGES[threadId] || [];
-      localStorage.setItem(key, JSON.stringify(initial));
+      localStorage.setItem(localKey, JSON.stringify(initial));
       return initial;
     }
   },
 
   // 메시지 전송 및 저장
   async saveMessage(threadId: string, message: Message): Promise<void> {
+    const docId = getDocId(`messages_${threadId}`);
+    const threadsDocId = getDocId("threads_data");
+    const localKey = getLocalKey(`app_messages_${threadId}`);
+
     try {
-      const msgDocRef = doc(db, ROOT_COLLECTION_NAME, `messages_${threadId}`);
+      const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
       let items: Message[] = [];
       if (snap.exists() && snap.data().items) {
@@ -200,7 +224,7 @@ export const storageService = {
       await setDoc(msgDocRef, { items });
 
       // 스레드 최신 메시지 업데이트
-      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, "threads_data");
+      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
       const threadSnap = await getDoc(threadsDocRef);
       if (threadSnap.exists() && threadSnap.data().items) {
         const threads = threadSnap.data().items as Thread[];
@@ -213,17 +237,19 @@ export const storageService = {
       }
     } catch (e) {
       console.warn("Firestore saveMessage fallback to local:", e);
-      const key = `app_messages_${threadId}`;
-      const existing: Message[] = JSON.parse(localStorage.getItem(key) || '[]');
+      const existing: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
       existing.push(message);
-      localStorage.setItem(key, JSON.stringify(existing));
+      localStorage.setItem(localKey, JSON.stringify(existing));
     }
   },
 
   // 보관된 표현 목록 가져오기
   async getSavedExpressions(): Promise<SavedExpression[]> {
+    const docId = getDocId("saved_expressions");
+    const localKey = getLocalKey('app_expressions');
+
     try {
-      const docRef = doc(db, ROOT_COLLECTION_NAME, "saved_expressions");
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(docRef);
       if (snap.exists() && snap.data().items) {
         return snap.data().items as SavedExpression[];
@@ -231,17 +257,20 @@ export const storageService = {
       await setDoc(docRef, { items: INITIAL_EXPRESSIONS });
       return INITIAL_EXPRESSIONS;
     } catch (e) {
-      const local = localStorage.getItem('app_expressions');
+      const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem('app_expressions', JSON.stringify(INITIAL_EXPRESSIONS));
+      localStorage.setItem(localKey, JSON.stringify(INITIAL_EXPRESSIONS));
       return INITIAL_EXPRESSIONS;
     }
   },
 
   // 표현 추가
   async saveExpression(expression: SavedExpression): Promise<void> {
+    const docId = getDocId("saved_expressions");
+    const localKey = getLocalKey('app_expressions');
+
     try {
-      const docRef = doc(db, ROOT_COLLECTION_NAME, "saved_expressions");
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(docRef);
       let items: SavedExpression[] = [];
       if (snap.exists() && snap.data().items) {
@@ -250,16 +279,19 @@ export const storageService = {
       items.unshift(expression);
       await setDoc(docRef, { items });
     } catch (e) {
-      const local = JSON.parse(localStorage.getItem('app_expressions') || '[]');
+      const local = JSON.parse(localStorage.getItem(localKey) || '[]');
       local.unshift(expression);
-      localStorage.setItem('app_expressions', JSON.stringify(local));
+      localStorage.setItem(localKey, JSON.stringify(local));
     }
   },
 
   // 보관된 대본 목록 가져오기
   async getSavedScripts(): Promise<SavedScript[]> {
+    const docId = getDocId("saved_scripts");
+    const localKey = getLocalKey('app_scripts');
+
     try {
-      const docRef = doc(db, ROOT_COLLECTION_NAME, "saved_scripts");
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(docRef);
       if (snap.exists() && snap.data().items) {
         return snap.data().items as SavedScript[];
@@ -267,11 +299,10 @@ export const storageService = {
       await setDoc(docRef, { items: INITIAL_SCRIPTS });
       return INITIAL_SCRIPTS;
     } catch (e) {
-      const local = localStorage.getItem('app_scripts');
+      const local = localStorage.getItem(localKey);
       if (local) return JSON.parse(local);
-      localStorage.setItem('app_scripts', JSON.stringify(INITIAL_SCRIPTS));
+      localStorage.setItem(localKey, JSON.stringify(INITIAL_SCRIPTS));
       return INITIAL_SCRIPTS;
     }
   }
 };
-

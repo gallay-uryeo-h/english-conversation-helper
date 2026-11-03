@@ -13,6 +13,14 @@ import {
   orderBy,
   serverTimestamp
 } from "firebase/firestore";
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged,
+  User 
+} from "firebase/auth";
 
 // 환경별(family vs school) 동적 Firebase 설정
 const firebaseConfig = {
@@ -25,11 +33,25 @@ const firebaseConfig = {
 };
 
 // 현재 타깃 (family 또는 school)
-export const CURRENT_APP_TARGET = import.meta.env.VITE_APP_TARGET || "family";
+export const CURRENT_APP_TARGET = (import.meta.env.VITE_APP_TARGET || "family") as 'family' | 'school';
+
+// 허용된 이메일 및 도메인 설정
+export const ALLOWED_EMAILS = (import.meta.env.VITE_ALLOWED_EMAILS || "")
+  .split(",")
+  .map((e: string) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export const ALLOWED_DOMAINS = (import.meta.env.VITE_ALLOWED_DOMAINS || "")
+  .split(",")
+  .map((d: string) => d.trim().toLowerCase().replace(/^@/, ''))
+  .filter(Boolean);
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 /**
  * ⚠️ 중요: 다른 앱과 공유하는 프로젝트이므로 단일 루트 컬렉션만 사용합니다.
@@ -53,5 +75,9 @@ export {
   onSnapshot,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
 };
+export type { User };
