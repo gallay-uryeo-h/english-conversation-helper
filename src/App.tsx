@@ -10,11 +10,13 @@ import { ChatView } from './components/ChatView';
 import { AnalysisView } from './components/AnalysisView';
 import { ArchiveView } from './components/ArchiveView';
 import { LoginView } from './components/LoginView';
+import { AdminModal } from './components/AdminModal';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const MainApp: React.FC = () => {
   const { user, appTarget, allowedEmails, allowedDomains } = useAuth();
   const [currentTab, setCurrentTab] = useState<MainTab>('friends');
+  const [prevTab, setPrevTab] = useState<MainTab>('friends');
   const [friends, setFriends] = useState<Friend[]>(DEFAULT_FRIENDS);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -23,7 +25,19 @@ const MainApp: React.FC = () => {
   const [scripts, setScripts] = useState<SavedScript[]>([]);
   const [selectedMessageForAnalysis, setSelectedMessageForAnalysis] = useState<Message | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // 스마트폰 기기 뒤로가기(하드웨어/브라우저 popstate) 감지
+  useEffect(() => {
+    const handlePopState = () => {
+      if (currentTab === 'chat') {
+        setCurrentTab(prevTab || 'friends');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentTab, prevTab]);
 
   // 사용자별 데이터 로드 (Firestore)
   useEffect(() => {
@@ -64,15 +78,33 @@ const MainApp: React.FC = () => {
     initData();
   }, [user?.uid]);
 
+  // 대화 화면 진입 헬퍼 (히스토리 스택에 push하여 뒤로가기 지원)
+  const openChatScreen = (thread: Thread, msgs: Message[]) => {
+    if (currentTab !== 'chat') {
+      setPrevTab(currentTab);
+      window.history.pushState({ screen: 'chat' }, '');
+    }
+    setActiveThread(thread);
+    setMessages(msgs);
+    setCurrentTab('chat');
+  };
+
+  // 상단 헤더 뒤로가기 버튼 클릭 핸들러
+  const handleBackFromChat = () => {
+    if (window.history.state?.screen === 'chat') {
+      window.history.back();
+    } else {
+      setCurrentTab(prevTab || 'friends');
+    }
+  };
+
   // 친구 카드를 눌러 1:1 대화 시작
   const handleStartChatWithFriend = async (friend: Friend) => {
     // 1. 이미 해당 친구와의 대화방이 있는지 확인
     const existing = threads.find(t => t.partnerName === friend.name);
     if (existing) {
-      setActiveThread(existing);
       const msgs = await storageService.getMessages(existing.id);
-      setMessages(msgs);
-      setCurrentTab('chat');
+      openChatScreen(existing, msgs);
       return;
     }
 
@@ -99,9 +131,7 @@ const MainApp: React.FC = () => {
 
     const updated = [newThread, ...threads];
     setThreads(updated);
-    setActiveThread(newThread);
-    setMessages([greetingMsg]);
-    setCurrentTab('chat');
+    openChatScreen(newThread, [greetingMsg]);
 
     await storageService.saveThread(newThread);
     await storageService.saveMessage(newThread.id, greetingMsg);
@@ -113,12 +143,10 @@ const MainApp: React.FC = () => {
     setFriends((prev) => [friend, ...prev]);
   };
 
-  // 활성 스레드 변경 시 해당 스레드의 메시지 로드
+  // 활성 스레드 선택하여 대화방 입장
   const handleSelectThread = async (thread: Thread) => {
-    setActiveThread(thread);
     const msgs = await storageService.getMessages(thread.id);
-    setMessages(msgs);
-    setCurrentTab('chat');
+    openChatScreen(thread, msgs);
   };
 
   // 대화방 삭제
@@ -147,9 +175,7 @@ const MainApp: React.FC = () => {
     };
     const updated = [newThread, ...threads];
     setThreads(updated);
-    setActiveThread(newThread);
-    setMessages([]);
-    setCurrentTab('chat');
+    openChatScreen(newThread, []);
 
     await storageService.saveThread(newThread);
   };
@@ -217,8 +243,9 @@ const MainApp: React.FC = () => {
         <Header 
           currentTab={currentTab} 
           activeThread={activeThread}
-          onBack={() => setCurrentTab('threads')}
+          onBack={handleBackFromChat}
           onOpenInfo={() => setShowInfoModal(true)}
+          onOpenAdmin={() => setShowAdminModal(true)}
         />
 
         {/* 메인 뷰 컨텐츠 */}
@@ -226,7 +253,7 @@ const MainApp: React.FC = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 text-[#5f6368]">
               <div className="w-8 h-8 border-3 border-[#1a73e8] border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p className="text-[13px] font-medium">내 대화 데이터 로드 중...</p>
+              <p className="text-[13px] font-medium">데이터 로드 중...</p>
             </div>
           ) : (
             <>
@@ -251,7 +278,7 @@ const MainApp: React.FC = () => {
                 />
               )}
 
-              {/* 3. 실시간 1:1 채팅 뷰 */}
+              {/* 3. 실시간 1:1 채팅 뷰 (하단 내비바 숨김) */}
               {currentTab === 'chat' && activeThread && (
                 <ChatView 
                   activeThread={activeThread}
@@ -285,12 +312,19 @@ const MainApp: React.FC = () => {
           )}
         </main>
 
-        {/* 하단 내비게이션 바 */}
-        <BottomNav 
-          currentTab={currentTab} 
-          onSelectTab={(tab) => setCurrentTab(tab)}
-        />
+        {/* 하단 내비게이션 바 (채팅 중일 때는 대화에 집중하도록 숨김) */}
+        {currentTab !== 'chat' && (
+          <BottomNav 
+            currentTab={currentTab} 
+            onSelectTab={(tab) => setCurrentTab(tab)}
+          />
+        )}
       </div>
+
+      {/* 어드민 계정 일괄 관리 모달 */}
+      {showAdminModal && (
+        <AdminModal onClose={() => setShowAdminModal(false)} />
+      )}
 
       {/* 프로젝트 & 데이터베이스 정보 모달 */}
       {showInfoModal && (
@@ -319,7 +353,8 @@ const MainApp: React.FC = () => {
               <div className="space-y-1.5 text-xs">
                 <p><strong>접속 계정:</strong> {user?.email}</p>
                 <p><strong>실행 모드:</strong> {appTarget === 'family' ? '🏡 가족 전용 (family-eb4f8)' : '🏫 학교 전용 (studio-2726051254-c02c9)'}</p>
-                <p><strong>접근 제한 정책:</strong> {appTarget === 'family' ? `허용 이메일 (${allowedEmails.join(', ')})` : `허용 도메인 (*@${allowedDomains.join(', ')})`}</p>
+                <p><strong>등록 계정 수:</strong> {allowedEmails.length}개 허용됨</p>
+                <p><strong>학교 허용 도메인:</strong> {allowedDomains.join(', ') || '없음'}</p>
               </div>
             </div>
 

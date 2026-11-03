@@ -322,3 +322,4 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
     </div>
   );
 };
+

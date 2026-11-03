@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MainTab, Thread } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,11 +7,45 @@ interface HeaderProps {
   activeThread: Thread | null;
   onBack?: () => void;
   onOpenInfo?: () => void;
+  onOpenAdmin?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack, onOpenInfo }) => {
-  const { user, logout, appTarget } = useAuth();
+export const Header: React.FC<HeaderProps> = ({ 
+  currentTab, 
+  activeThread, 
+  onBack, 
+  onOpenInfo,
+  onOpenAdmin 
+}) => {
+  const { user, logout, appTarget, isAdmin } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // PWA 설치 가능 여부 감지 (Chrome / Edge / Android)
+  useEffect(() => {
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+      if (choiceResult.outcome === 'accepted') {
+        setIsInstallable(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      alert("iOS Safari 브라우저에서는 하단의 [공유] 아이콘을 누른 후 [홈 화면에 추가]를 선택하시면 앱으로 설치됩니다.");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-[#f0f4f9] border-b border-[#e0e3e7] pt-[env(safe-area-inset-top,0px)] max-w-md mx-auto relative">
@@ -21,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack
             <button 
               onClick={onBack}
               className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
-              title="대화 목록으로 돌아가기"
+              title="이전 화면으로 돌아가기"
             >
               <span className="material-symbols-outlined text-[22px]">arrow_back</span>
             </button>
@@ -69,19 +103,41 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack
         </div>
 
         <div className="flex items-center gap-1">
+          {/* 어드민 계정 관리 버튼 (관리자만 노출) */}
+          {isAdmin && onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="h-8 px-2.5 bg-[#fef7e0] hover:bg-[#feefc3] text-[#b06000] rounded-full flex items-center gap-1 text-[11px] font-bold border border-[#fbd65c] transition-all active:scale-95 shadow-xs"
+              title="접근 허용 계정 일괄 관리"
+            >
+              <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+              <span>계정 관리</span>
+            </button>
+          )}
+
+          {/* 앱 설치 버튼 (PWA) */}
+          <button
+            onClick={handleInstallClick}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[#1a73e8] hover:bg-black/5 active:scale-95"
+            title="홈 화면에 앱 설치하기"
+          >
+            <span className="material-symbols-outlined text-[19px]">install_mobile</span>
+          </button>
+
+          {/* 프로젝트 정보 모달 */}
           <button 
             onClick={onOpenInfo}
-            className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95"
             title="프로젝트 환경 정보"
           >
-            <span className="material-symbols-outlined text-[20px]">cloud_done</span>
+            <span className="material-symbols-outlined text-[19px]">cloud_done</span>
           </button>
 
           {/* 유저 프로필 아바타 버튼 */}
           {user && (
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold"
+              className="w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0 ml-0.5"
               title={`${user.displayName || user.email} 프로필`}
             >
               {user.photoURL ? (
@@ -130,20 +186,38 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, activeThread, onBack
               </div>
             </div>
 
-            <div className="py-2.5">
+            <div className="py-2.5 space-y-1">
               <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full ${
                 appTarget === 'family' ? 'bg-[#e8f0fe] text-[#1967d2]' : 'bg-[#e6f4ea] text-[#137333]'
               }`}>
                 {appTarget === 'family' ? '🏡 가족 모드 접속 중' : '🏫 학교 모드 접속 중'}
               </span>
+              {isAdmin && (
+                <span className="block text-[10px] font-bold text-[#b06000]">
+                  👑 마스터 관리자 권한 활성화됨
+                </span>
+              )}
             </div>
+
+            {isAdmin && onOpenAdmin && (
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  onOpenAdmin();
+                }}
+                className="w-full mb-1.5 py-2 px-3 bg-[#fef7e0] hover:bg-[#feefc3] text-[#b06000] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                접근 허용 계정 관리
+              </button>
+            )}
 
             <button
               onClick={() => {
                 setShowProfileMenu(false);
                 logout();
               }}
-              className="w-full mt-1 py-2 px-3 bg-[#f8f9fa] hover:bg-[#f1f3f4] text-[#d93025] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              className="w-full py-2 px-3 bg-[#f8f9fa] hover:bg-[#f1f3f4] text-[#d93025] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
               <span className="material-symbols-outlined text-[16px]">logout</span>
               로그아웃

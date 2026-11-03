@@ -210,7 +210,7 @@ Respond ONLY with a valid JSON array of objects with keys:
   // 메시지에 대한 심화 언어 분석 결과 생성
   analyzeMessage(englishText: string, koreanDraft?: string): MessageAnalysis {
     const tipPrefix = koreanDraft ? `입력하신 의도("${koreanDraft}")가 ` : '';
-    
+
     // 길이 및 어휘 난이도에 따른 점수 산출
     const wordCount = englishText.trim().split(/\s+/).length;
     const grammarScore = Math.min(98, Math.max(82, 85 + (wordCount > 5 ? 7 : 2)));
@@ -219,11 +219,11 @@ Respond ONLY with a valid JSON array of objects with keys:
     return {
       grammarScore,
       fluencyScore,
-      improvedVersion: englishText.includes('very good') 
-        ? englishText.replace(/very good/gi, 'truly fantastic') 
+      improvedVersion: englishText.includes('very good')
+        ? englishText.replace(/very good/gi, 'truly fantastic')
         : englishText.includes('happy')
-        ? englishText.replace(/happy/gi, 'thrilled')
-        : englishText,
+          ? englishText.replace(/happy/gi, 'thrilled')
+          : englishText,
       explanation: `${tipPrefix}문장의 시제와 전달력이 우수합니다. 일상 대화에서는 'very' 대신 'completely', 'absolutely' 같은 부사를 곁들이면 훨씬 더 원어민스럽게 들립니다.`,
       keyVocabulary: [
         { word: "turn around", meaning: "상황이나 기분을 반전시키다", phonetic: "/tɜːrn əˈraʊnd/" },

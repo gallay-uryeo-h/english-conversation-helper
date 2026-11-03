@@ -48,21 +48,19 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
       <div className="p-1 bg-[#eaedff] rounded-2xl flex items-center">
         <button
           onClick={() => setSubTab('expressions')}
-          className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-            subTab === 'expressions'
+          className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all ${subTab === 'expressions'
               ? 'bg-white text-[#1a73e8] shadow-sm'
               : 'text-[#5f6368] hover:text-[#1f1f1f]'
-          }`}
+            }`}
         >
           회화 표현 보관함 ({expressions.length})
         </button>
         <button
           onClick={() => setSubTab('scripts')}
-          className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-            subTab === 'scripts'
+          className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all ${subTab === 'scripts'
               ? 'bg-white text-[#1a73e8] shadow-sm'
               : 'text-[#5f6368] hover:text-[#1f1f1f]'
-          }`}
+            }`}
         >
           콘텐츠 대본 ({scripts.length})
         </button>
@@ -177,11 +175,10 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                   {script.dialogue.map((line, idx) => (
                     <div
                       key={idx}
-                      className={`p-2.5 rounded-xl text-[13px] ${
-                        line.isUser 
-                          ? 'bg-[#e8f0fe] border border-[#c2e7ff] ml-3' 
+                      className={`p-2.5 rounded-xl text-[13px] ${line.isUser
+                          ? 'bg-[#e8f0fe] border border-[#c2e7ff] ml-3'
                           : 'bg-[#f8fafd] border border-[#e0e3e7] mr-3'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-[11px] font-bold text-[#1a73e8]">
