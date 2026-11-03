@@ -1,37 +1,35 @@
 import React, { useState } from 'react';
-import { Thread } from '../types';
+import { Thread, Friend } from '../types';
 
 interface ThreadsViewProps {
   threads: Thread[];
+  friends: Friend[];
   activeThreadId: string;
   onSelectThread: (thread: Thread) => void;
-  onCreateThread?: (title: string, partnerName: string) => void;
+  onStartChatWithFriend: (friend: Friend) => void;
   onDeleteThread?: (threadId: string) => void;
   onNavigateToFriends?: () => void;
 }
 
 export const ThreadsView: React.FC<ThreadsViewProps> = ({
   threads,
+  friends,
   activeThreadId,
   onSelectThread,
-  onCreateThread,
+  onStartChatWithFriend,
   onDeleteThread,
   onNavigateToFriends
 }) => {
-  const [filter, setFilter] = useState<'all' | 'fav' | 'daily' | 'business'>('all');
+  const [filter, setFilter] = useState<'all' | 'fav'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newPartner, setNewPartner] = useState('');
+  const [friendSearch, setFriendSearch] = useState('');
 
   const filteredThreads = threads.filter((t) => {
     if (filter === 'fav' && !t.isFavorite) return false;
-    if (filter === 'daily' && t.category !== 'daily') return false;
-    if (filter === 'business' && t.category !== 'business') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        t.title.toLowerCase().includes(q) ||
         t.partnerName.toLowerCase().includes(q) ||
         t.lastMessage.toLowerCase().includes(q)
       );
@@ -39,13 +37,19 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
     return true;
   });
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim() || !newPartner.trim()) return;
-    onCreateThread?.(newTitle.trim(), newPartner.trim());
-    setNewTitle('');
-    setNewPartner('');
+  const filteredFriends = friends.filter((f) => {
+    if (!friendSearch.trim()) return true;
+    const q = friendSearch.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.email && f.email.toLowerCase().includes(q))
+    );
+  });
+
+  const handleSelectFriendToChat = (friend: Friend) => {
     setShowModal(false);
+    setFriendSearch('');
+    onStartChatWithFriend(friend);
   };
 
   const formatTime = (ts: number) => {
@@ -67,7 +71,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
           <span className="material-symbols-outlined text-[#5f6368] text-[20px] mr-2">search</span>
           <input
             type="text"
-            placeholder="스레드 및 대화 내용 검색..."
+            placeholder="대화 내용 또는 대화 상대 검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-transparent text-[14px] text-[#1f1f1f] outline-none placeholder-[#777586]"
@@ -80,13 +84,11 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
         </div>
       </div>
 
-      {/* 카테고리 필터 칩 */}
+      {/* 필터 칩 */}
       <div className="px-4 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2">
         {[
           { id: 'all', label: '전체 대화' },
-          { id: 'fav', label: '⭐ 즐겨찾기' },
-          { id: 'daily', label: '☕ 일상 스몰톡' },
-          { id: 'business', label: '💼 비즈니스' }
+          { id: 'fav', label: '⭐ 즐겨찾기' }
         ].map((item) => (
           <button
             key={item.id}
@@ -114,8 +116,8 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                 아직 시작된 대화가 없습니다
               </h3>
               <p className="text-[13px] text-[#5f6368] leading-relaxed">
-                '회화 친구' 메뉴에서 마음에 드는 AI 파트너를 선택하여<br />
-                첫 영어 스몰톡을 시작해보세요!
+                '회화 친구' 메뉴에서 대화할 친구를 선택하거나<br />
+                우측 하단의 '새 대화 만들기' 버튼을 눌러보세요!
               </p>
             </div>
             {onNavigateToFriends && (
@@ -124,7 +126,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1a73e8] text-white rounded-2xl text-[13px] font-semibold hover:bg-[#1557b0] shadow-sm active:scale-95 transition-all"
               >
                 <span className="material-symbols-outlined text-[18px]">group</span>
-                회화 친구 선택하기
+                회화 친구 목록 보기
               </button>
             )}
           </div>
@@ -171,10 +173,6 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                     </span>
                   </div>
 
-                  <p className="text-[12px] text-[#1a73e8] font-medium truncate mb-1">
-                    {thread.title}
-                  </p>
-
                   <p className="text-[13px] text-[#444746] truncate">
                     {thread.lastMessage || '대화를 시작해보세요.'}
                   </p>
@@ -212,50 +210,133 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
         </button>
       </div>
 
-      {/* 새 스레드 생성 모달 */}
+      {/* 새 대화 시작: 친구 선택 모달 */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl">
-            <h3 className="text-[17px] font-bold text-[#1f1f1f] mb-3">새 대화 스레드 개설</h3>
-            <form onSubmit={handleCreate} className="space-y-3">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl flex flex-col max-h-[80vh]">
+            {/* 모달 헤더 */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#e0e3e7]">
               <div>
-                <label className="block text-[12px] font-medium text-[#5f6368] mb-1">대화 상대 (AI 파트너 이름)</label>
+                <h3 className="text-[17px] font-bold text-[#1f1f1f]">새 대화 시작하기</h3>
+                <p className="text-[12px] text-[#5f6368] mt-0.5">대화할 상대를 친구 목록에서 선택하세요</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setFriendSearch('');
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5f6368] hover:bg-[#f0f4f9]"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* 친구 검색창 */}
+            <div className="py-3">
+              <div className="relative flex items-center bg-[#f0f4f9] rounded-2xl px-3 py-2 border border-[#e0e3e7]">
+                <span className="material-symbols-outlined text-[#5f6368] text-[18px] mr-2">search</span>
                 <input
                   type="text"
-                  placeholder="예: 마이클 (여행 가이드)"
-                  value={newPartner}
-                  onChange={(e) => setNewPartner(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e0e3e7] rounded-xl text-[14px] outline-none focus:border-[#1a73e8]"
-                  required
+                  placeholder="친구 이름 또는 이메일 검색..."
+                  value={friendSearch}
+                  onChange={(e) => setFriendSearch(e.target.value)}
+                  className="w-full bg-transparent text-[13px] text-[#1f1f1f] outline-none placeholder-[#777586]"
+                  autoFocus
                 />
+                {friendSearch && (
+                  <button onClick={() => setFriendSearch('')} className="text-[#5f6368]">
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="block text-[12px] font-medium text-[#5f6368] mb-1">대화 주제 / 상황</label>
-                <input
-                  type="text"
-                  placeholder="예: 공항에서 환승 비행기 찾기"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e0e3e7] rounded-xl text-[14px] outline-none focus:border-[#1a73e8]"
-                  required
-                />
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5f6368] hover:bg-[#f0f4f9]"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-[13px] font-semibold bg-[#1a73e8] text-white hover:bg-[#1557b0]"
-                >
-                  시작하기
-                </button>
-              </div>
-            </form>
+            </div>
+
+            {/* 친구 목록 리스트 */}
+            <div className="flex-1 overflow-y-auto divide-y divide-[#f0f4f9] space-y-1">
+              {filteredFriends.length === 0 ? (
+                <div className="py-10 text-center text-[#5f6368] space-y-2">
+                  <span className="material-symbols-outlined text-[36px] text-[#bfc6dd]">person_search</span>
+                  <p className="text-[13px]">
+                    {friends.length === 0 ? '등록된 친구가 없습니다.' : '검색 결과가 없습니다.'}
+                  </p>
+                  {onNavigateToFriends && (
+                    <button
+                      onClick={() => {
+                        setShowModal(false);
+                        onNavigateToFriends();
+                      }}
+                      className="text-[12px] text-[#1a73e8] font-semibold underline mt-1"
+                    >
+                      '회화 친구' 메뉴에서 그룹 멤버 추가하기 →
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredFriends.map((friend) => (
+                  <div
+                    key={friend.id}
+                    onClick={() => handleSelectFriendToChat(friend)}
+                    className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f0f4f9] cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-full font-semibold text-[15px] flex items-center justify-center shrink-0 ring-1 ring-black/5 overflow-hidden"
+                        style={{ backgroundColor: friend.avatarBg, color: '#1f1f1f' }}
+                      >
+                        {friend.photoURL ? (
+                          <img
+                            src={friend.photoURL}
+                            alt={friend.name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          friend.avatarText
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[14px] font-bold text-[#1f1f1f] truncate">
+                            {friend.name}
+                          </span>
+                          {friend.isAi && (
+                            <span className="text-[10px] font-semibold bg-[#e8f0fe] text-[#1a73e8] px-1.5 py-0.5 rounded-full">
+                              AI
+                            </span>
+                          )}
+                        </div>
+                        {friend.email && (
+                          <p className="text-[11px] text-[#5f6368] truncate">
+                            {friend.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 bg-[#1a73e8] text-white rounded-xl text-[12px] font-semibold hover:bg-[#1557b0] shrink-0"
+                    >
+                      대화하기
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 하단 닫기 */}
+            <div className="pt-3 border-t border-[#e0e3e7] flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModal(false);
+                  setFriendSearch('');
+                }}
+                className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5f6368] hover:bg-[#f0f4f9]"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

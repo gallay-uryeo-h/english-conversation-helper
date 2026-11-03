@@ -233,15 +233,15 @@ Respond ONLY with a valid JSON array of objects with keys:
     };
   },
 
-  // AI 파트너의 실시간 답변 생성 (페르소나 반영)
-  async generateAssistantReplyAsync(partnerName: string, partnerRole: string, userText: string): Promise<string> {
+  // AI 파트너의 실시간 답변 생성
+  async generateAssistantReplyAsync(partnerName: string, userText: string): Promise<string> {
     if (GEMINI_API_KEY) {
       try {
-        const prompt = `You are ${partnerName}, an English conversation partner whose role is: "${partnerRole}".
-A learner said to you in English: "${userText}"
+        const prompt = `You are ${partnerName}, an English conversation partner for a friendly English learner.
+The user said to you in English: "${userText}"
 
-Reply naturally, warmly, and concisely (1 to 3 sentences in conversational English).
-Ask a friendly follow-up question to keep the conversation going smoothly.`;
+Reply naturally, warmly, and concisely (1 to 2 sentences in conversational spoken English).
+Ask a friendly follow-up question to keep the chat going smoothly.`;
 
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
@@ -261,11 +261,11 @@ Ask a friendly follow-up question to keep the conversation going smoothly.`;
       }
     }
 
-    return this.generateAssistantReply(partnerName, userText, partnerRole);
+    return this.generateAssistantReply(partnerName, userText);
   },
 
   // AI 상대방의 자연스러운 답장 생성 (로컬 규칙)
-  generateAssistantReply(partnerName: string, userText: string, partnerRole?: string): string {
+  generateAssistantReply(partnerName: string, userText: string): string {
     const textLower = userText.toLowerCase();
 
     if (textLower.includes('ramen') || textLower.includes('noodle') || textLower.includes('rain') || textLower.includes('umbrella')) {
@@ -275,21 +275,12 @@ Ask a friendly follow-up question to keep the conversation going smoothly.`;
       return `A coffee break sounds wonderful! ☕ There's a cozy new cafe with great pastries nearby. What time works best for you?`;
     }
     if (textLower.includes('hello') || textLower.includes('hi') || textLower.includes('hey')) {
-      return `Hey there! It's great to hear from you. How has your week been treating you so far?`;
+      return `Hey there! It's great to hear from you. How has your day been treating you so far?`;
     }
     if (textLower.includes('tired') || textLower.includes('exhausted') || textLower.includes('busy')) {
-      return `Oh, take care of yourself! Sounds like you've been working really hard. Do you have any relaxing plans for the weekend?`;
-    }
-    if (partnerRole?.includes('Business')) {
-      return `That's a very clear point. In business communications, aligning early saves a lot of back-and-forth. How should we proceed with the next step?`;
-    }
-    if (partnerRole?.includes('Travel')) {
-      return `That sounds like an adventure! Traveling is all about those unexpected moments. Where would you love to travel next? ✈️`;
-    }
-    if (partnerRole?.includes('Tutor')) {
-      return `Great job expressing that! Your sentence was very clear and natural. Let's try expanding on that—how did that make you feel? 😊`;
+      return `Oh, take care of yourself! Sounds like you've been working really hard. Do you have any relaxing plans for tonight?`;
     }
 
-    return `That makes so much sense! I really appreciate you sharing that. What inspired you to think about that today?`;
+    return `That makes so much sense! I really appreciate you sharing that. What's on your mind right now?`;
   }
 };

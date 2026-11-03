@@ -117,16 +117,11 @@ const MainApp: React.FC = () => {
     // 2. 새 대화방 개설
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
-      title: `${friend.name}와의 스몰톡`,
       partnerName: friend.name,
-      partnerRole: friend.role || '회화 파트너',
       avatarBg: friend.avatarBg,
       avatarText: friend.avatarText,
-      lastMessage: friend.isAi 
-        ? '안녕하세요! 영어 대화 연습을 시작해볼까요?' 
-        : '대화가 시작되었습니다.',
-      updatedAt: Date.now(),
-      category: 'daily'
+      lastMessage: '대화가 시작되었습니다.',
+      updatedAt: Date.now()
     };
 
     // 3. 친구의 첫 인사 메시지 자동 생성
@@ -171,17 +166,14 @@ const MainApp: React.FC = () => {
   };
 
   // 새 스레드 직접 생성
-  const handleCreateThread = async (title: string, partnerName: string) => {
+  const handleCreateThread = async (partnerName: string) => {
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
-      title,
       partnerName,
-      partnerRole: 'Conversational Partner',
       avatarBg: '#d0e1fb',
       avatarText: partnerName.charAt(0).toUpperCase(),
       lastMessage: '대화가 시작되었습니다.',
-      updatedAt: Date.now(),
-      category: 'daily'
+      updatedAt: Date.now()
     };
     const updated = [newThread, ...threads];
     setThreads(updated);
@@ -219,7 +211,6 @@ const MainApp: React.FC = () => {
     setTimeout(async () => {
       const replyText = await aiService.generateAssistantReplyAsync(
         activeThread.partnerName, 
-        activeThread.partnerRole || '', 
         text
       );
       const assistantMsg: Message = {
@@ -280,9 +271,10 @@ const MainApp: React.FC = () => {
               {currentTab === 'threads' && (
                 <ThreadsView 
                   threads={threads}
+                  friends={friends}
                   activeThreadId={activeThread?.id || ''}
                   onSelectThread={handleSelectThread}
-                  onCreateThread={handleCreateThread}
+                  onStartChatWithFriend={handleStartChatWithFriend}
                   onDeleteThread={handleDeleteThread}
                   onNavigateToFriends={() => setCurrentTab('friends')}
                 />

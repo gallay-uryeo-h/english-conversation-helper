@@ -48,7 +48,6 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
       photoURL: member.photoURL,
       avatarBg: member.avatarBg,
       avatarText: member.avatarText,
-      role: isFamily ? '가족 멤버' : '학교 구성원',
       isAi: false
     };
 
@@ -150,13 +149,9 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
                   <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
                     {friend.name}
                   </h3>
-                  {friend.isAi ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
-                      AI 도우미
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f1f3f4] text-[#444746]">
-                      {isFamily ? '가족' : '학교'}
+                  {friend.isAi && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
+                      AI
                     </span>
                   )}
                 </div>

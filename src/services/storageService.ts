@@ -11,8 +11,7 @@ import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember } fr
 // 기본 제공 AI 영어 회화 코치
 export const DEFAULT_AI_FRIEND: Friend = {
   id: 'friend-ai-coach',
-  name: 'AI 영어 회화 코치',
-  role: '실시간 AI 스몰톡 & 피드백 도우미',
+  name: 'AI 영어 코치',
   email: 'ai.coach@helper',
   avatarBg: '#d0e1fb',
   avatarText: 'AI',

@@ -39,7 +39,6 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({
       english: word,
       korean: meaning,
       exampleSentence: analysis.improvedVersion,
-      situation: '스레드 심화 피드백',
       tag: 'Inspector Saved',
       createdAt: Date.now()
     });

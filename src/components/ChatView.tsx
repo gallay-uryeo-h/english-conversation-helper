@@ -64,31 +64,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] w-full relative">
-      {/* 1. 상단 대화 정보 리본 (좌우 끝까지 늘어난 풀 위드 리본) */}
-      <div className="w-full bg-[#eef4ff] border-b border-[#d2e3fc] px-4 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div 
-            className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ring-1 ring-black/5"
-            style={{ backgroundColor: activeThread.avatarBg, color: '#1f1f1f' }}
-          >
-            {activeThread.avatarText}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[12px] font-bold text-[#1f1f1f] truncate leading-tight">
-              {activeThread.title}
-            </p>
-            <p className="text-[10px] text-[#5f6368] truncate mt-0.5">
-              {activeThread.partnerName} • {activeThread.partnerRole || '회화 파트너'}
-            </p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35] shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#188038] animate-pulse"></span>
-          대화 진행 중
-        </span>
-      </div>
-
-      {/* 2. 메시지 리스트 영역 */}
+      {/* 1. 메시지 리스트 영역 */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';

@@ -59,39 +59,34 @@ export const Header: React.FC<HeaderProps> = ({
               {currentTab === 'friends' && (
                 <>
                   <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">group</span>
-                  AI 회화 파트너
+                  회화 친구
                 </>
               )}
               {currentTab === 'threads' && (
                 <>
                   <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">forum</span>
-                  진행 중인 대화
+                  대화 목록
                 </>
               )}
               {currentTab === 'chat' && (
                 <>
                   <span className="w-2.5 h-2.5 rounded-full bg-[#188038] animate-pulse shrink-0"></span>
-                  <span className="truncate">{activeThread?.partnerName || '실시간 스레드 대화'}</span>
+                  <span className="truncate">{activeThread?.partnerName || '대화'}</span>
                 </>
               )}
               {currentTab === 'analysis' && (
                 <>
                   <span className="material-symbols-outlined text-[#00897b] text-[20px]">insights</span>
-                  스레드 언어 인스펙터
+                  언어 인스펙터
                 </>
               )}
               {currentTab === 'archive' && (
                 <>
                   <span className="material-symbols-outlined text-[#795900] text-[20px]">bookmark</span>
-                  표현 및 대본 보관함
+                  표현 보관함
                 </>
               )}
             </h1>
-            {currentTab === 'chat' && activeThread?.partnerRole && (
-              <p className="text-[11px] text-[#5f6368] truncate">
-                {activeThread.partnerRole}
-              </p>
-            )}
           </div>
         </div>
 

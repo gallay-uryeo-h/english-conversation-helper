@@ -1,15 +1,15 @@
 export interface Thread {
   id: string;
-  title: string;
   partnerName: string;
-  partnerRole?: string;
   avatarBg: string;
   avatarText: string;
   lastMessage: string;
   updatedAt: number;
+  title?: string;
+  partnerRole?: string;
   unreadCount?: number;
   isFavorite?: boolean;
-  category: 'daily' | 'business' | 'interview' | 'travel';
+  category?: string;
 }
 
 export interface RecommendationCard {
@@ -43,7 +43,7 @@ export interface SavedExpression {
   english: string;
   korean: string;
   exampleSentence: string;
-  situation: string;
+  situation?: string;
   tag: string;
   createdAt: number;
 }
@@ -58,11 +58,11 @@ export interface ScriptDialogueLine {
 export interface SavedScript {
   id: string;
   title: string;
-  situation: string;
   level: string;
   targetExpression: string;
   dialogue: ScriptDialogueLine[];
   createdAt: number;
+  situation?: string;
 }
 
 export interface Friend {
@@ -87,4 +87,3 @@ export interface GroupMember {
 }
 
 export type MainTab = 'friends' | 'threads' | 'chat' | 'analysis' | 'archive';
-

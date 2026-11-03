@@ -19,7 +19,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   const [newEng, setNewEng] = useState('');
   const [newKor, setNewKor] = useState('');
   const [newEx, setNewEx] = useState('');
-  const [newSit, setNewSit] = useState('');
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +29,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
       english: newEng.trim(),
       korean: newKor.trim(),
       exampleSentence: newEx.trim() || newEng.trim(),
-      situation: newSit.trim() || '직접 등록한 표현',
       tag: 'Custom',
       createdAt: Date.now()
     });
@@ -38,7 +36,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
     setNewEng('');
     setNewKor('');
     setNewEx('');
-    setNewSit('');
     setShowAddModal(false);
   };
 
@@ -108,7 +105,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                     {exp.tag}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-[#5f6368]">{exp.situation}</span>
                     {onDeleteExpression && (
                       <button
                         onClick={() => onDeleteExpression(exp.id)}
@@ -160,7 +156,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#e8f0fe] text-[#1a73e8]">
                       {script.level}
                     </span>
-                    <span className="text-[11px] text-[#5f6368] truncate">{script.situation}</span>
                   </div>
                   <h4 className="text-[16px] font-bold text-[#1f1f1f]">
                     {script.title}
@@ -231,16 +226,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                   placeholder="예: A cup of coffee turned my day around."
                   value={newEx}
                   onChange={(e) => setNewEx(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e0e3e7] rounded-xl text-[14px] outline-none focus:border-[#1a73e8]"
-                />
-              </div>
-              <div>
-                <label className="block text-[12px] font-medium text-[#5f6368] mb-1">상황 / 뉘앙스</label>
-                <input
-                  type="text"
-                  placeholder="예: 기분 전환, 일상 감정 표현"
-                  value={newSit}
-                  onChange={(e) => setNewSit(e.target.value)}
                   className="w-full px-3 py-2 border border-[#e0e3e7] rounded-xl text-[14px] outline-none focus:border-[#1a73e8]"
                 />
               </div>
