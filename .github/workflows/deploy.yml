@@ -1,4 +1,4 @@
-name: Deploy to Firebase Hosting
+name: Deploy to Firebase Hosting (Family)
 on:
   push:
     branches:
@@ -14,12 +14,13 @@ jobs:
         with:
           node-version: 20
 
-      - run: npm install --legacy-peer-deps && npm run build
+      - name: Install and Build (Family Mode)
+        run: npm install --legacy-peer-deps && npm run build:family
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT}}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           channelId: live
           projectId: family-eb4f8
           firebaseToolsVersion: '15.34.0'

@@ -14,15 +14,18 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 
-// 사용자 지정 Firebase 설정
+// 환경별(family vs school) 동적 Firebase 설정
 const firebaseConfig = {
-  apiKey: "AIzaSyAodFwVZvSAlMxppnODM4VVR5fSjfkhvi4",
-  authDomain: "studio-2726051254-c02c9.firebaseapp.com",
-  projectId: "studio-2726051254-c02c9",
-  storageBucket: "studio-2726051254-c02c9.firebasestorage.app",
-  messagingSenderId: "58367223801",
-  appId: "1:58367223801:web:817b230c96124a828dff28"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCgn8GP3wBJX1x8vPWlMeAlvKIOmn1HGjE",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "family-eb4f8.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "family-eb4f8",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "family-eb4f8.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "540772799272",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:540772799272:web:140a5b5b964fabbe6a761d"
 };
+
+// 현재 타깃 (family 또는 school)
+export const CURRENT_APP_TARGET = import.meta.env.VITE_APP_TARGET || "family";
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
@@ -52,4 +55,3 @@ export {
   orderBy,
   serverTimestamp
 };
-

@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:family": "vite --mode family",
+    "dev:school": "vite --mode school",
     "build": "tsc && vite build",
+    "build:family": "tsc && vite build --mode family",
+    "build:school": "tsc && vite build --mode school",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,4 +30,3 @@
     "vite-plugin-pwa": "^0.20.5"
   }
 }
-
