@@ -1,15 +1,91 @@
 import { RecommendationCard, MessageAnalysis } from '../types';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+export const getGroqApiKey = (): string => {
+  return localStorage.getItem('groq_api_key') || (import.meta.env.VITE_GROQ_API_KEY as string) || "";
+};
+
+export const getGeminiApiKey = (): string => {
+  return localStorage.getItem('gemini_api_key') || (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
+};
 
 export const aiService = {
-  // 한글 입력에 따른 실시간 영어 변환 추천 카드 생성
+  // 한글 입력에 따른 실시간 영어 변환 추천 카드 생성 (Groq -> Gemini -> 로컬 패턴)
   async generateRecommendationsAsync(koreanInput: string): Promise<RecommendationCard[]> {
     const trimmed = koreanInput.trim();
     if (!trimmed) return [];
 
-    // Gemini API가 설정된 경우 실시간 AI 생성 호출
-    if (GEMINI_API_KEY) {
+    // 1. Groq API 우선 시도 (초고속 Llama 3.3 70B)
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      try {
+        const prompt = `Translate and adapt this Korean sentence/thought into 3 distinct English conversation options:
+1. Natural: Common, idiomatic spoken English
+2. Casual: Friendly, relaxed tone for friends
+3. Polite: Courteous tone
+
+Korean input: "${trimmed}"
+
+Respond ONLY with a JSON object format:
+{
+  "options": [
+    {
+      "tone": "Natural" | "Casual" | "Polite",
+      "english": "...",
+      "koreanMeaning": "brief 1-line Korean nuance explanation",
+      "grammarTip": "brief 1-line idiom/grammar tip"
+    }
+  ]
+}`;
+
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              {
+                role: "system",
+                content: "You are an expert English conversation coach. Always output strictly valid JSON."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.6,
+            max_tokens: 600
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            const list = Array.isArray(parsed) ? parsed : (parsed.options || parsed.recommendations || []);
+            if (Array.isArray(list) && list.length > 0) {
+              return list.map((item: any, idx: number) => ({
+                id: `rec-groq-${Date.now()}-${idx}`,
+                tone: item.tone || 'Natural',
+                english: item.english,
+                koreanMeaning: item.koreanMeaning || '',
+                grammarTip: item.grammarTip || ''
+              }));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Groq recommendation error, trying fallback:", e);
+      }
+    }
+
+    // 2. Gemini API 보조 시도
+    const geminiKey = getGeminiApiKey();
+    if (geminiKey) {
       try {
         const prompt = `You are a real-time English conversation assistant. 
 Translate and adapt the following Korean thought/draft into 3 distinct English conversation options:
@@ -20,12 +96,12 @@ Translate and adapt the following Korean thought/draft into 3 distinct English c
 Korean input: "${trimmed}"
 
 Respond ONLY with a valid JSON array of objects with keys:
-- tone ("Natural" | "Casual" | "Polite" | "Business")
+- tone ("Natural" | "Casual" | "Polite")
 - english (string)
 - koreanMeaning (brief 1-line Korean explanation of the tone/nuance)
 - grammarTip (optional 1-line vocabulary or idiom tip)`;
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -51,11 +127,11 @@ Respond ONLY with a valid JSON array of objects with keys:
           }
         }
       } catch (e) {
-        console.warn("Gemini API translation error, using intelligent fallback:", e);
+        console.warn("Gemini translation error, using local fallback:", e);
       }
     }
 
-    // 동기식 지능형 추천 엔진 (API 미설정 또는 오프라인 시)
+    // 3. 로컬 지능형 추천 엔진 (오프라인 / 키 미설정 시)
     return this.generateRecommendations(trimmed);
   },
 
@@ -64,7 +140,6 @@ Respond ONLY with a valid JSON array of objects with keys:
     const trimmed = koreanInput.trim();
     if (!trimmed) return [];
 
-    // 키워드별 인텔리전트 추천 패턴
     if (trimmed.includes('비') || trimmed.includes('우산') || trimmed.includes('젖')) {
       return [
         {
@@ -109,10 +184,10 @@ Respond ONLY with a valid JSON array of objects with keys:
         },
         {
           id: 'rec-3',
-          tone: 'Business',
-          english: "Would you have time for a brief coffee chat to discuss our collaboration?",
-          koreanMeaning: "비즈니스 및 업무 관련 미팅 제안",
-          grammarTip: "coffee chat = 가벼운 업무 협의"
+          tone: 'Polite',
+          english: "Would you have time for a brief coffee chat whenever convenient?",
+          koreanMeaning: "정중한 티타임 제안",
+          grammarTip: "whenever convenient = 편하신 때에"
         }
       ];
     }
@@ -128,13 +203,6 @@ Respond ONLY with a valid JSON array of objects with keys:
         },
         {
           id: 'rec-2',
-          tone: 'Business',
-          english: "I would like to align on the agenda before tomorrow's review session.",
-          koreanMeaning: "회의 전 안건 조율",
-          grammarTip: "align on ~ = 상호 방향을 맞추다"
-        },
-        {
-          id: 'rec-3',
           tone: 'Natural',
           english: "Let me know what time works best for you, and I'll adjust my schedule.",
           koreanMeaning: "상대방의 편한 시간을 묻는 매끄러운 표현",
@@ -181,7 +249,7 @@ Respond ONLY with a valid JSON array of objects with keys:
       ];
     }
 
-    // 일반적 입력에 대한 표현 패턴
+    // 일반적 기본 구문
     return [
       {
         id: 'rec-gen-1',
@@ -200,18 +268,82 @@ Respond ONLY with a valid JSON array of objects with keys:
       {
         id: 'rec-gen-3',
         tone: 'Polite',
-        english: `I'd like to talk about this topic: "${trimmed}".`,
-        koreanMeaning: "정중하게 화제를 제시하는 표현",
+        english: `I'd like to share this with you: "${trimmed}".`,
+        koreanMeaning: "정중하게 화제를 공유하는 표현",
         grammarTip: "I'd like to ~ = ~하고 싶습니다"
       }
     ];
   },
 
-  // 메시지에 대한 심화 언어 분석 결과 생성
+  // 메시지에 대한 심화 언어 분석 결과 생성 (Groq -> 로컬)
+  async analyzeMessageAsync(englishText: string, koreanDraft?: string): Promise<MessageAnalysis> {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      try {
+        const prompt = `Analyze this spoken English sentence from a Korean language learner:
+"${englishText}"
+${koreanDraft ? `Learner's intended Korean meaning: "${koreanDraft}"` : ''}
+
+Provide a constructive, encouraging evaluation in JSON format with:
+- grammarScore (number from 75 to 100)
+- fluencyScore (number from 75 to 100)
+- improvedVersion (string: more natural, idiomatic phrasing)
+- explanation (string in Korean: 1-2 friendly sentences explaining nuance and tips)
+- keyVocabulary (array of 2-3 objects: {"word": string, "meaning": string in Korean, "phonetic": string optional})
+
+Respond ONLY with valid JSON.`;
+
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              {
+                role: "system",
+                content: "You are an encouraging native English evaluator. Always output valid JSON."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.5,
+            max_tokens: 500
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            if (parsed.grammarScore && parsed.improvedVersion) {
+              return {
+                grammarScore: parsed.grammarScore,
+                fluencyScore: parsed.fluencyScore || 90,
+                improvedVersion: parsed.improvedVersion,
+                explanation: parsed.explanation || '',
+                keyVocabulary: parsed.keyVocabulary || []
+              };
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Groq analysis error, fallback to local:", e);
+      }
+    }
+
+    return this.analyzeMessage(englishText, koreanDraft);
+  },
+
+  // 로컬 언어 분석 (오프라인 / 키 미설정)
   analyzeMessage(englishText: string, koreanDraft?: string): MessageAnalysis {
     const tipPrefix = koreanDraft ? `입력하신 의도("${koreanDraft}")가 ` : '';
-
-    // 길이 및 어휘 난이도에 따른 점수 산출
     const wordCount = englishText.trim().split(/\s+/).length;
     const grammarScore = Math.min(98, Math.max(82, 85 + (wordCount > 5 ? 7 : 2)));
     const fluencyScore = Math.min(97, Math.max(80, 84 + (wordCount > 7 ? 8 : 3)));
@@ -233,9 +365,48 @@ Respond ONLY with a valid JSON array of objects with keys:
     };
   },
 
-  // AI 파트너의 실시간 답변 생성
+  // AI 파트너의 실시간 답변 생성 (Groq -> Gemini -> 로컬 규칙)
   async generateAssistantReplyAsync(partnerName: string, userText: string): Promise<string> {
-    if (GEMINI_API_KEY) {
+    // 1. Groq API 우선 (초고속 Llama 3.3 70B)
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              {
+                role: "system",
+                content: `You are ${partnerName}, a close friend having an English conversation with the user. Reply warmly, naturally, and concisely (1 to 2 sentences in authentic spoken English). Ask a friendly follow-up question to keep the chat going smoothly.`
+              },
+              {
+                role: "user",
+                content: userText
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 150
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const reply = data.choices?.[0]?.message?.content;
+          if (reply) return reply.trim();
+        }
+      } catch (e) {
+        console.warn("Groq reply error, trying Gemini fallback:", e);
+      }
+    }
+
+    // 2. Gemini API 보조
+    const geminiKey = getGeminiApiKey();
+    if (geminiKey) {
       try {
         const prompt = `You are ${partnerName}, an English conversation partner for a friendly English learner.
 The user said to you in English: "${userText}"
@@ -243,7 +414,7 @@ The user said to you in English: "${userText}"
 Reply naturally, warmly, and concisely (1 to 2 sentences in conversational spoken English).
 Ask a friendly follow-up question to keep the chat going smoothly.`;
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -261,6 +432,7 @@ Ask a friendly follow-up question to keep the chat going smoothly.`;
       }
     }
 
+    // 3. 로컬 답장 생성
     return this.generateAssistantReply(partnerName, userText);
   },
 

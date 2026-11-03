@@ -25,7 +25,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, recommendations]);
 
-  // 입력 내용 변경 시 한글 여부 감지 및 추천 생성
+  // 입력 내용 변경 시 한글 여부 감지 및 추천 생성 (즉시 로컬 + 비동기 Groq/AI 추천)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -33,8 +33,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
     // 한글이 포함되어 있는지 검사
     const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(val);
     if (hasKorean && val.trim().length >= 2) {
-      const recs = aiService.generateRecommendations(val);
-      setRecommendations(recs);
+      // 1. 즉각적인 로컬 추천 (지연시간 0ms)
+      const instantRecs = aiService.generateRecommendations(val);
+      if (instantRecs.length > 0) {
+        setRecommendations(instantRecs);
+      }
+
+      // 2. 비동기 AI 추천 (Groq Llama 3.3 / Gemini)
+      aiService.generateRecommendationsAsync(val).then((aiRecs) => {
+        if (aiRecs && aiRecs.length > 0) {
+          setRecommendations(aiRecs);
+        }
+      });
     } else {
       setRecommendations([]);
     }

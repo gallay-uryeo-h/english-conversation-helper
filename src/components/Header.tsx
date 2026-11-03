@@ -19,6 +19,31 @@ export const Header: React.FC<HeaderProps> = ({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // Groq API 키 상태 관리
+  const [groqKey, setGroqKey] = useState(() => localStorage.getItem('groq_api_key') || '');
+  const [showKeyText, setShowKeyText] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [showKeyAccordion, setShowKeyAccordion] = useState(!localStorage.getItem('groq_api_key'));
+
+  const handleSaveGroqKey = () => {
+    const trimmed = groqKey.trim();
+    if (trimmed) {
+      localStorage.setItem('groq_api_key', trimmed);
+      setSaveStatus('API 키가 저장되었습니다!');
+    } else {
+      localStorage.removeItem('groq_api_key');
+      setSaveStatus('API 키가 삭제되었습니다.');
+    }
+    setTimeout(() => setSaveStatus(null), 2500);
+  };
+
+  const handleClearGroqKey = () => {
+    localStorage.removeItem('groq_api_key');
+    setGroqKey('');
+    setSaveStatus('API 키가 삭제되었습니다.');
+    setTimeout(() => setSaveStatus(null), 2500);
+  };
+
   // PWA 설치 가능 여부 감지 (Chrome / Edge / Android)
   useEffect(() => {
     const handleBeforeInstall = (e: any) => {
@@ -125,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="fixed inset-0 z-40" 
             onClick={() => setShowProfileMenu(false)}
           />
-          <div className="absolute right-4 top-14 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-[#dadce0] p-4 z-50 animate-fadeIn text-left">
+          <div className="absolute right-4 top-14 mt-1 w-72 sm:w-80 max-h-[85vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-[#dadce0] p-4 z-50 animate-fadeIn text-left">
             <div className="flex items-center gap-3 pb-3 border-b border-[#f1f3f4]">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e8f0fe] flex items-center justify-center text-[#1a73e8] font-bold text-sm shrink-0">
                 {user.photoURL ? (
@@ -149,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            <div className="py-2.5 space-y-1">
+            <div className="py-2 space-y-1">
               <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full ${
                 appTarget === 'family' ? 'bg-[#e8f0fe] text-[#1967d2]' : 'bg-[#e6f4ea] text-[#137333]'
               }`}>
@@ -159,6 +184,94 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="block text-[10px] font-bold text-[#b06000]">
                   👑 마스터 관리자 권한
                 </span>
+              )}
+            </div>
+
+            {/* AI API 키 설정 (Groq) */}
+            <div className="my-2 p-3 bg-[#f8fafd] rounded-2xl border border-[#dadce0] space-y-2">
+              <div 
+                className="flex items-center justify-between cursor-pointer select-none"
+                onClick={() => setShowKeyAccordion(!showKeyAccordion)}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#f29900] text-[18px]">bolt</span>
+                  <span className="text-[12px] font-bold text-[#1f1f1f]">Groq AI API 키</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    groqKey ? 'bg-[#e6f4ea] text-[#137333]' : 'bg-[#f1f3f4] text-[#5f6368]'
+                  }`}>
+                    {groqKey ? '● 활성화' : '미등록'}
+                  </span>
+                  <span className="material-symbols-outlined text-[16px] text-[#5f6368]">
+                    {showKeyAccordion ? 'expand_less' : 'expand_more'}
+                  </span>
+                </div>
+              </div>
+
+              {showKeyAccordion && (
+                <div className="space-y-2 pt-1 border-t border-[#e0e3e7]">
+                  <p className="text-[11px] text-[#5f6368] leading-tight">
+                    초고속 Llama 3.3 모델로 실시간 추천과 AI 대화를 구동합니다.
+                  </p>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKeyText ? 'text' : 'password'}
+                      value={groqKey}
+                      onChange={(e) => setGroqKey(e.target.value)}
+                      placeholder="gsk_..."
+                      className="w-full text-[12px] font-mono px-2.5 py-1.5 pr-8 bg-white border border-[#dadce0] rounded-xl outline-none focus:border-[#1a73e8]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeyText(!showKeyText)}
+                      className="absolute right-2 text-[#747775] hover:text-[#1f1f1f]"
+                      title={showKeyText ? '가리기' : '보기'}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">
+                        {showKeyText ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                    <a
+                      href="https://console.groq.com/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#1a73e8] hover:underline flex items-center gap-0.5"
+                    >
+                      <span>무료 키 발급</span>
+                      <span className="material-symbols-outlined text-[11px]">open_in_new</span>
+                    </a>
+
+                    <div className="flex items-center gap-1">
+                      {groqKey && (
+                        <button
+                          type="button"
+                          onClick={handleClearGroqKey}
+                          className="px-2 py-1 text-[11px] text-[#d93025] hover:bg-[#fce8e6] rounded-lg font-medium transition-colors"
+                        >
+                          삭제
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleSaveGroqKey}
+                        className="px-3 py-1 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-lg text-[11px] font-semibold transition-colors shadow-xs"
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+
+                  {saveStatus && (
+                    <p className="text-[11px] font-medium text-[#188038] text-center bg-[#e6f4ea] py-1 rounded-lg animate-in fade-in">
+                      {saveStatus}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

@@ -190,8 +190,8 @@ const MainApp: React.FC = () => {
   ) => {
     if (!activeThread) return;
 
-    // 1. 유저 메시지 생성 및 분석
-    const analysis = aiService.analyzeMessage(text, koreanDraft);
+    // 1. 유저 메시지 생성 및 분석 (Groq AI 또는 로컬 분석)
+    const analysis = await aiService.analyzeMessageAsync(text, koreanDraft);
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       sender: 'user',
