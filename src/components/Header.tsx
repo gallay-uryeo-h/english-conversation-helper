@@ -212,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
               {showKeyAccordion && (
                 <div className="space-y-2 pt-1 border-t border-[#e0e3e7]">
                   <p className="text-[11px] text-[#5f6368] leading-tight">
-                    초고속 Llama 3.3 모델로 실시간 추천과 AI 대화를 구동합니다.
+                    Groq SDK 기반 <span className="font-mono text-[#1a73e8] font-semibold">openai/gpt-oss-120b</span> 모델을 기본으로 초고속 실시간 추천과 AI 대화를 구동합니다.
                   </p>
 
                   <div className="relative flex items-center">

@@ -1,4 +1,7 @@
+import Groq from 'groq-sdk';
 import { RecommendationCard, MessageAnalysis } from '../types';
+
+export const GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 export const getGroqApiKey = (): string => {
   return localStorage.getItem('groq_api_key') || (import.meta.env.VITE_GROQ_API_KEY as string) || "";
@@ -8,17 +11,29 @@ export const getGeminiApiKey = (): string => {
   return localStorage.getItem('gemini_api_key') || (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
 };
 
+// Groq SDK 클라이언트 생성 헬퍼
+export const getGroqClient = (apiKey?: string): Groq | null => {
+  const key = apiKey || getGroqApiKey();
+  if (!key) return null;
+  return new Groq({
+    apiKey: key,
+    dangerouslyAllowBrowser: true
+  });
+};
+
 export const aiService = {
-  // 한글 입력에 따른 실시간 영어 변환 추천 카드 생성 (Groq -> Gemini -> 로컬 패턴)
+  // 한글 입력에 따른 실시간 영어 변환 추천 카드 생성 (Groq SDK -> Gemini -> 로컬 패턴)
   async generateRecommendationsAsync(koreanInput: string): Promise<RecommendationCard[]> {
     const trimmed = koreanInput.trim();
     if (!trimmed) return [];
 
-    // 1. Groq API 우선 시도 (초고속 Llama 3.3 70B)
+    // 1. Groq SDK 우선 시도 (openai/gpt-oss-120b 모델 기본)
     const groqKey = getGroqApiKey();
     if (groqKey) {
       try {
-        const prompt = `Translate and adapt this Korean sentence/thought into 3 distinct English conversation options:
+        const groq = getGroqClient(groqKey);
+        if (groq) {
+          const prompt = `Translate and adapt this Korean sentence/thought into 3 distinct English conversation options:
 1. Natural: Common, idiomatic spoken English
 2. Casual: Friendly, relaxed tone for friends
 3. Polite: Courteous tone
@@ -37,14 +52,8 @@ Respond ONLY with a JSON object format:
   ]
 }`;
 
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${groqKey}`
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+          const chatCompletion = await groq.chat.completions.create({
+            model: GROQ_DEFAULT_MODEL,
             messages: [
               {
                 role: "system",
@@ -58,12 +67,9 @@ Respond ONLY with a JSON object format:
             response_format: { type: "json_object" },
             temperature: 0.6,
             max_tokens: 600
-          })
-        });
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const content = data.choices?.[0]?.message?.content;
+          const content = chatCompletion.choices[0]?.message?.content;
           if (content) {
             const parsed = JSON.parse(content);
             const list = Array.isArray(parsed) ? parsed : (parsed.options || parsed.recommendations || []);
@@ -79,7 +85,7 @@ Respond ONLY with a JSON object format:
           }
         }
       } catch (e) {
-        console.warn("Groq recommendation error, trying fallback:", e);
+        console.warn("Groq SDK recommendation error, trying fallback:", e);
       }
     }
 
@@ -275,12 +281,14 @@ Respond ONLY with a valid JSON array of objects with keys:
     ];
   },
 
-  // 메시지에 대한 심화 언어 분석 결과 생성 (Groq -> 로컬)
+  // 메시지에 대한 심화 언어 분석 결과 생성 (Groq SDK -> 로컬)
   async analyzeMessageAsync(englishText: string, koreanDraft?: string): Promise<MessageAnalysis> {
     const groqKey = getGroqApiKey();
     if (groqKey) {
       try {
-        const prompt = `Analyze this spoken English sentence from a Korean language learner:
+        const groq = getGroqClient(groqKey);
+        if (groq) {
+          const prompt = `Analyze this spoken English sentence from a Korean language learner:
 "${englishText}"
 ${koreanDraft ? `Learner's intended Korean meaning: "${koreanDraft}"` : ''}
 
@@ -293,14 +301,8 @@ Provide a constructive, encouraging evaluation in JSON format with:
 
 Respond ONLY with valid JSON.`;
 
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${groqKey}`
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+          const chatCompletion = await groq.chat.completions.create({
+            model: GROQ_DEFAULT_MODEL,
             messages: [
               {
                 role: "system",
@@ -314,12 +316,9 @@ Respond ONLY with valid JSON.`;
             response_format: { type: "json_object" },
             temperature: 0.5,
             max_tokens: 500
-          })
-        });
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const content = data.choices?.[0]?.message?.content;
+          const content = chatCompletion.choices[0]?.message?.content;
           if (content) {
             const parsed = JSON.parse(content);
             if (parsed.grammarScore && parsed.improvedVersion) {
@@ -334,7 +333,7 @@ Respond ONLY with valid JSON.`;
           }
         }
       } catch (e) {
-        console.warn("Groq analysis error, fallback to local:", e);
+        console.warn("Groq SDK analysis error, fallback to local:", e);
       }
     }
 
@@ -365,20 +364,16 @@ Respond ONLY with valid JSON.`;
     };
   },
 
-  // AI 파트너의 실시간 답변 생성 (Groq -> Gemini -> 로컬 규칙)
+  // AI 파트너의 실시간 답변 생성 (Groq SDK -> Gemini -> 로컬 규칙)
   async generateAssistantReplyAsync(partnerName: string, userText: string): Promise<string> {
-    // 1. Groq API 우선 (초고속 Llama 3.3 70B)
+    // 1. Groq SDK 우선 (openai/gpt-oss-120b 모델 기본)
     const groqKey = getGroqApiKey();
     if (groqKey) {
       try {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${groqKey}`
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+        const groq = getGroqClient(groqKey);
+        if (groq) {
+          const chatCompletion = await groq.chat.completions.create({
+            model: GROQ_DEFAULT_MODEL,
             messages: [
               {
                 role: "system",
@@ -391,16 +386,13 @@ Respond ONLY with valid JSON.`;
             ],
             temperature: 0.7,
             max_tokens: 150
-          })
-        });
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const reply = data.choices?.[0]?.message?.content;
+          const reply = chatCompletion.choices[0]?.message?.content;
           if (reply) return reply.trim();
         }
       } catch (e) {
-        console.warn("Groq reply error, trying Gemini fallback:", e);
+        console.warn("Groq SDK reply error, trying Gemini fallback:", e);
       }
     }
 
