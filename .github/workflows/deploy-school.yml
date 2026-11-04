@@ -13,6 +13,8 @@ jobs:
           node-version: 20
 
       - name: Install and Build (School Mode)
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
         run: npm install --legacy-peer-deps && npm run build:school
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
@@ -22,4 +24,3 @@ jobs:
           channelId: live
           projectId: studio-2726051254-c02c9
           firebaseToolsVersion: '15.34.0'
-
