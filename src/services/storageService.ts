@@ -182,6 +182,27 @@ export const storageService = {
     }
   },
 
+  // 친구 삭제
+  async deleteFriend(friendId: string): Promise<void> {
+    const docId = getDocId("friends_data");
+    const localKey = getLocalKey('app_friends');
+
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, docId);
+      const snap = await getDoc(docRef);
+      if (snap.exists() && snap.data().items) {
+        const items = (snap.data().items as Friend[]).filter(f => f.id !== friendId);
+        await setDoc(docRef, { items });
+      }
+    } catch (e) {
+      console.warn("deleteFriend remote error:", e);
+    }
+
+    const local: Friend[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+    const filtered = local.filter(f => f.id !== friendId);
+    localStorage.setItem(localKey, JSON.stringify(filtered));
+  },
+
   // 스레드(대화방) 목록 가져오기
   async getThreads(): Promise<Thread[]> {
     const docId = getDocId("threads_data");

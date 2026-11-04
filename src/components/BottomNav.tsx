@@ -11,7 +11,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
   const tabs = [
     {
       id: 'friends' as MainTab,
-      label: '회화 친구',
+      label: '친구',
       icon: 'group',
       fill: currentTab === 'friends'
     },

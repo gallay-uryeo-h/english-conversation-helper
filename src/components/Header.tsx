@@ -217,7 +217,7 @@ export const Header: React.FC<HeaderProps> = ({
               {currentTab === 'friends' && (
                 <>
                   <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">group</span>
-                  회화 친구
+                  친구
                 </>
               )}
               {currentTab === 'threads' && (

@@ -124,7 +124,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                   {exp.korean}
                 </p>
 
-                <div className="p-2.5 bg-[#faf8ff] rounded-xl text-[12px] text-[#444746] leading-relaxed border-l-2 border-[#1a73e8]">
+                <div className="p-2.5 bg-[#f8fafd] rounded-xl text-[12px] text-[#444746] leading-relaxed border border-[#edf0f5]">
                   <span className="font-semibold text-[#1f1f1f] block mb-0.5">예문:</span>
                   "{exp.exampleSentence}"
                 </div>

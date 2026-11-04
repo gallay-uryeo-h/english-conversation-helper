@@ -8,6 +8,7 @@ interface FriendsViewProps {
   threads: Thread[];
   onStartChat: (friend: Friend, forceNew?: boolean) => void;
   onAddFriend: (friend: Friend) => void;
+  onDeleteFriend?: (friendId: string) => void;
 }
 
 export const FriendsView: React.FC<FriendsViewProps> = ({
@@ -15,12 +16,15 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
   groupMembers,
   threads,
   onStartChat,
-  onAddFriend
+  onAddFriend,
+  onDeleteFriend
 }) => {
   const { user, appTarget } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
+  // 친구 상세 정보 및 삭제 모달 상태
+  const [selectedFriendForInfo, setSelectedFriendForInfo] = useState<Friend | null>(null);
 
   const isFamily = appTarget === 'family';
   const groupTitle = isFamily ? '가족 그룹' : '학교 그룹';
@@ -123,11 +127,11 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
         </div>
       </div>
 
-      {/* 3. 회화 친구 리스트 */}
+      {/* 3. 친구 리스트 */}
       <div className="px-4 space-y-3">
         <div className="flex items-center justify-between text-xs text-[#5f6368] font-medium px-1">
-          <span>나의 회화 친구 ({filteredFriends.length}명)</span>
-          <span className="text-[11px]">대화하기를 누르면 1:1 대화가 시작됩니다</span>
+          <span>나의 친구 ({filteredFriends.length}명)</span>
+          <span className="text-[11px]">프로필을 누르면 정보 확인 및 삭제할 수 있습니다</span>
         </div>
 
         {filteredFriends.map((friend) => {
@@ -139,16 +143,20 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
               className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div 
-                  className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs"
+                {/* 친구 원형 버튼 (누르면 정보 팝업 및 삭제) */}
+                <button 
+                  type="button"
+                  onClick={() => setSelectedFriendForInfo(friend)}
+                  className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs cursor-pointer hover:ring-2 hover:ring-[#1a73e8] active:scale-95 transition-all"
                   style={{ backgroundColor: friend.avatarBg }}
+                  title={`${friend.name} 정보 및 관리`}
                 >
                   {friend.photoURL ? (
                     <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
                   ) : (
                     <span>{friend.avatarText}</span>
                   )}
-                </div>
+                </button>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
@@ -300,6 +308,98 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
               <button
                 onClick={() => setShowMemberModal(false)}
                 className="w-full py-2 bg-[#f1f3f4] text-[#444746] rounded-xl text-xs font-semibold hover:bg-[#e3e3e3]"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. 친구 원형 버튼 클릭 시 나타나는 간단한 정보 및 삭제 팝업 */}
+      {selectedFriendForInfo && (
+        <div 
+          onClick={() => setSelectedFriendForInfo(null)}
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-150"
+          >
+            {/* 원형 아바타 */}
+            <div 
+              className="w-20 h-20 rounded-full mx-auto overflow-hidden flex items-center justify-center font-bold text-2xl text-[#1f1f1f] shadow-sm ring-4 ring-black/5"
+              style={{ backgroundColor: selectedFriendForInfo.avatarBg }}
+            >
+              {selectedFriendForInfo.photoURL ? (
+                <img 
+                  src={selectedFriendForInfo.photoURL} 
+                  alt={selectedFriendForInfo.name} 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span>{selectedFriendForInfo.avatarText}</span>
+              )}
+            </div>
+
+            {/* 친구 기본 정보 */}
+            <div>
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <h3 className="text-[17px] font-bold text-[#1f1f1f]">
+                  {selectedFriendForInfo.name}
+                </h3>
+                {selectedFriendForInfo.isAi && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
+                    AI 파트너
+                  </span>
+                )}
+              </div>
+              {selectedFriendForInfo.email && (
+                <p className="text-[12px] text-[#5f6368] font-mono break-all">
+                  {selectedFriendForInfo.email}
+                </p>
+              )}
+              <p className="text-[12px] text-[#1a73e8] font-medium mt-1.5">
+                대화방: {threads.filter(t => t.partnerName === selectedFriendForInfo.name).length}개
+              </p>
+            </div>
+
+            {/* 작업 버튼: 대화하기, 삭제, 닫기 */}
+            <div className="pt-2 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedFriendForInfo;
+                  setSelectedFriendForInfo(null);
+                  onStartChat(target, false);
+                }}
+                className="w-full py-2.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[17px]">chat</span>
+                대화 시작하기
+              </button>
+
+              {onDeleteFriend && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`'${selectedFriendForInfo.name}'님을 친구 목록에서 삭제하시겠습니까?`)) {
+                      onDeleteFriend(selectedFriendForInfo.id);
+                      setSelectedFriendForInfo(null);
+                    }
+                  }}
+                  className="w-full py-2 text-[#d93025] hover:bg-[#fce8e6] rounded-xl text-[12px] font-semibold flex items-center justify-center gap-1 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[17px]">person_remove</span>
+                  친구 삭제
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSelectedFriendForInfo(null)}
+                className="w-full py-2 text-[#5f6368] hover:bg-[#f0f4f9] rounded-xl text-[12px] font-medium transition-colors"
               >
                 닫기
               </button>

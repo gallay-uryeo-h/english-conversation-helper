@@ -146,6 +146,12 @@ const MainApp: React.FC = () => {
     setFriends((prev) => [friend, ...prev]);
   };
 
+  // 친구 삭제
+  const handleDeleteFriend = async (friendId: string) => {
+    await storageService.deleteFriend(friendId);
+    setFriends((prev) => prev.filter(f => f.id !== friendId));
+  };
+
   // 활성 스레드 선택하여 대화방 입장
   const handleSelectThread = async (thread: Thread) => {
     let msgs = await storageService.getMessages(thread.id);
@@ -278,7 +284,7 @@ const MainApp: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* 1. 회화 친구 메뉴 */}
+              {/* 1. 친구 메뉴 */}
               {currentTab === 'friends' && (
                 <FriendsView 
                   friends={friends}
@@ -286,6 +292,7 @@ const MainApp: React.FC = () => {
                   threads={threads}
                   onStartChat={handleStartChatWithFriend}
                   onAddFriend={handleAddFriend}
+                  onDeleteFriend={handleDeleteFriend}
                 />
               )}
 
