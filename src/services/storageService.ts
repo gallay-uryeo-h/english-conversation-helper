@@ -8,11 +8,11 @@ import {
 } from '../firebase';
 import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember } from '../types';
 
-// 기본 제공 AI 영어 회화 코치
+// 기본 제공 AI 영어 회화 친구
 export const DEFAULT_AI_FRIEND: Friend = {
   id: 'friend-ai-coach',
-  name: 'AI 영어 코치',
-  email: 'ai.coach@helper',
+  name: 'AI 친구',
+  email: 'ai@helper',
   avatarBg: '#d0e1fb',
   avatarText: 'AI',
   isAi: true
@@ -250,6 +250,20 @@ export const storageService = {
       const filtered = local.filter(t => t.id !== threadId);
       localStorage.setItem(localKey, JSON.stringify(filtered));
     }
+  },
+
+  // 전체 스레드 초기화/삭제
+  async clearAllThreads(): Promise<void> {
+    const threadsDocId = getDocId("threads_data");
+    const localKey = getLocalKey('app_threads');
+
+    try {
+      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
+      await setDoc(threadsDocRef, { items: [] });
+    } catch (e) {
+      console.warn("clearAllThreads remote error, clearing local:", e);
+    }
+    localStorage.removeItem(localKey);
   },
 
   // 특정 스레드의 메시지 목록 가져오기

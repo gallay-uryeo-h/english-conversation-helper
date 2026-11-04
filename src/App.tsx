@@ -188,7 +188,17 @@ const MainApp: React.FC = () => {
     await storageService.saveThread(newThread);
   };
 
-  // 메시지 전송 및 AI 응답 처리
+  // 전체 대화방 초기화 (Mock 및 기존 대화 청소)
+  const handleClearAllThreads = async () => {
+    if (confirm("모든 대화 목록을 비우시겠습니까?")) {
+      await storageService.clearAllThreads();
+      setThreads([]);
+      setActiveThread(null);
+      setMessages([]);
+    }
+  };
+
+  // 메시지 전송 및 AI 응답 처리 (0ms 즉각 반응 낙관적 UI)
   const handleSendMessage = async (
     text: string, 
     koreanDraft?: string, 
@@ -196,25 +206,31 @@ const MainApp: React.FC = () => {
   ) => {
     if (!activeThread) return;
 
-    // 1. 유저 메시지 생성 및 분석 (Groq AI 또는 로컬 분석)
-    const analysis = await aiService.analyzeMessageAsync(text, koreanDraft);
+    // 1. 유저 메시지 화면에 0ms 즉시 추가
+    const userMsgId = `msg-${Date.now()}`;
     const userMsg: Message = {
-      id: `msg-${Date.now()}`,
+      id: userMsgId,
       sender: 'user',
       text,
       koreanDraft,
       timestamp: Date.now(),
-      recommendations,
-      analysis
+      recommendations
     };
 
-    const newMsgs = [...messages, userMsg];
-    setMessages(newMsgs);
+    setMessages((prev) => [...prev, userMsg]);
     setSelectedMessageForAnalysis(userMsg);
-    await storageService.saveMessage(activeThread.id, userMsg);
+    storageService.saveMessage(activeThread.id, userMsg);
 
-    // 2. AI 파트너의 응답 생성
-    setTimeout(async () => {
+    // 2. 비동기 백그라운드 문법/표현 심화 분석 (UI 블로킹 없음)
+    aiService.analyzeMessageAsync(text, koreanDraft).then(async (analysis) => {
+      if (analysis) {
+        setMessages((prev) => prev.map(m => m.id === userMsgId ? { ...m, analysis } : m));
+        await storageService.saveMessage(activeThread.id, { ...userMsg, analysis });
+      }
+    }).catch(e => console.warn("Background analysis error:", e));
+
+    // 3. AI 파트너의 응답 생성 (인위적 딜레이 없이 즉시 호출)
+    try {
       const replyText = await aiService.generateAssistantReplyAsync(
         activeThread.partnerName, 
         text
@@ -227,7 +243,9 @@ const MainApp: React.FC = () => {
       };
       setMessages((prev) => [...prev, assistantMsg]);
       await storageService.saveMessage(activeThread.id, assistantMsg);
-    }, 850);
+    } catch (e) {
+      console.warn("Assistant reply error:", e);
+    }
   };
 
   // 표현 보관함 저장
@@ -283,6 +301,7 @@ const MainApp: React.FC = () => {
                   onSelectThread={handleSelectThread}
                   onStartChatWithFriend={handleStartChatWithFriend}
                   onDeleteThread={handleDeleteThread}
+                  onClearAllThreads={handleClearAllThreads}
                   onNavigateToFriends={() => setCurrentTab('friends')}
                 />
               )}

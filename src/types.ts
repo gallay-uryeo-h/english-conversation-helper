@@ -30,6 +30,11 @@ export interface MessageAnalysis {
   keyVocabulary: { word: string; meaning: string; phonetic?: string }[];
 }
 
+export interface MessageTranslation {
+  translation: string;
+  keyExpressions: Array<{ phrase: string; meaning: string }>;
+}
+
 export interface Message {
   id: string;
   sender: 'user' | 'assistant';
@@ -38,6 +43,7 @@ export interface Message {
   timestamp: number;
   recommendations?: RecommendationCard[];
   analysis?: MessageAnalysis;
+  translation?: MessageTranslation;
 }
 
 export interface SavedExpression {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Thread, Friend } from '../types';
+import { DEFAULT_AI_FRIEND } from '../services/storageService';
 
 interface ThreadsViewProps {
   threads: Thread[];
@@ -8,6 +9,7 @@ interface ThreadsViewProps {
   onSelectThread: (thread: Thread) => void;
   onStartChatWithFriend: (friend: Friend, forceNew?: boolean) => void;
   onDeleteThread?: (threadId: string) => void;
+  onClearAllThreads?: () => void;
   onNavigateToFriends?: () => void;
 }
 
@@ -18,6 +20,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
   onSelectThread,
   onStartChatWithFriend,
   onDeleteThread,
+  onClearAllThreads,
   onNavigateToFriends
 }) => {
   const [filter, setFilter] = useState<'all' | 'fav'>('all');
@@ -49,7 +52,6 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
   const handleSelectFriendToChat = (friend: Friend) => {
     setShowModal(false);
     setFriendSearch('');
-    // 한 친구와 여러 대화방을 가질 수 있도록 새 스레드로 생성
     onStartChatWithFriend(friend, true);
   };
 
@@ -97,51 +99,71 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
         </div>
       </div>
 
-      {/* 필터 칩 */}
-      <div className="px-4 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2">
-        {[
-          { id: 'all', label: `전체 대화 (${threads.length})` },
-          { id: 'fav', label: '⭐ 즐겨찾기' }
-        ].map((item) => (
+      {/* 필터 칩 & 대화 비우기 버튼 */}
+      <div className="px-4 flex items-center justify-between gap-1.5 pb-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'all', label: `전체 대화 (${threads.length})` },
+            { id: 'fav', label: '⭐ 즐겨찾기' }
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id as any)}
+              className={`px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors ${
+                filter === item.id
+                  ? 'bg-[#1a73e8] text-white shadow-xs'
+                  : 'bg-[#f0f4f9] text-[#444746] hover:bg-[#e2e7ff]'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {threads.length > 0 && onClearAllThreads && (
           <button
-            key={item.id}
-            onClick={() => setFilter(item.id as any)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors ${
-              filter === item.id
-                ? 'bg-[#1a73e8] text-white shadow-sm'
-                : 'bg-[#f0f4f9] text-[#444746] hover:bg-[#e2e7ff]'
-            }`}
+            type="button"
+            onClick={onClearAllThreads}
+            className="text-[11px] text-[#5f6368] hover:text-[#d93025] px-2 py-1 rounded-lg hover:bg-[#fce8e6] whitespace-nowrap transition-colors shrink-0"
+            title="대화 목록 전체 비우기"
           >
-            {item.label}
+            대화 비우기
           </button>
-        ))}
+        )}
       </div>
 
       {/* 구글챗 스타일 스레드 스트림 리스트 */}
       <div className="divide-y divide-[#edf0f5] mt-1" id="thread-stream">
         {threads.length === 0 ? (
-          <div className="py-20 px-6 text-center text-[#5f6368] space-y-4">
-            <div className="w-16 h-16 bg-[#e8f0fe] rounded-3xl mx-auto flex items-center justify-center text-[#1a73e8]">
+          <div className="py-16 px-6 text-center text-[#5f6368] space-y-4">
+            <div className="w-16 h-16 bg-[#e8f0fe] rounded-3xl mx-auto flex items-center justify-center text-[#1a73e8] shadow-xs">
               <span className="material-symbols-outlined text-[36px]">forum</span>
             </div>
             <div>
-              <h3 className="text-[16px] font-bold text-[#1f1f1f] mb-1">
-                아직 시작된 대화 스레드가 없습니다
+              <h3 className="text-[17px] font-bold text-[#1f1f1f] mb-1">
+                대화 목록이 비어 있습니다
               </h3>
               <p className="text-[13px] text-[#5f6368] leading-relaxed">
-                한 친구와도 여러 대화방(스레드)을 자유롭게 만들 수 있습니다.<br />
-                우측 하단의 '새 대화 만들기' 버튼을 눌러보세요!
+                Gemini 3.5 기반 AI와 영어 회화를 시작해보세요!
               </p>
             </div>
-            {onNavigateToFriends && (
+            <div className="pt-2 flex flex-col items-center gap-2">
               <button
-                onClick={onNavigateToFriends}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1a73e8] text-white rounded-2xl text-[13px] font-semibold hover:bg-[#1557b0] shadow-sm active:scale-95 transition-all"
+                onClick={() => onStartChatWithFriend(DEFAULT_AI_FRIEND, true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#1a73e8] text-white rounded-2xl text-[14px] font-bold hover:bg-[#1557b0] shadow-md active:scale-95 transition-all"
               >
-                <span className="material-symbols-outlined text-[18px]">group</span>
-                회화 친구 목록 보기
+                <span className="material-symbols-outlined text-[20px]">smart_toy</span>
+                AI와 새 대화 시작하기
               </button>
-            )}
+              {onNavigateToFriends && (
+                <button
+                  onClick={onNavigateToFriends}
+                  className="text-[12px] text-[#5f6368] hover:text-[#1a73e8] hover:underline"
+                >
+                  회화 친구 목록 보기 →
+                </button>
+              )}
+            </div>
           </div>
         ) : filteredThreads.length === 0 ? (
           <div className="py-16 text-center text-[#5f6368]">
@@ -186,7 +208,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                     </span>
                   </div>
 
-                  {/* 최신 메시지 스니펫 (구글챗 스타일: 나: / 상대방:) */}
+                  {/* 최신 메시지 스니펫 (구글챗 스타일) */}
                   <p className="text-[13px] text-[#3c4043] truncate mb-1">
                     {thread.lastSender === 'user' ? (
                       <span className="text-[#1a73e8] font-semibold">나: </span>
@@ -196,7 +218,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                     <span>{thread.lastMessage || '대화를 시작해보세요.'}</span>
                   </p>
 
-                  {/* 하단 답글 카운트 뱃지 (구글챗 스레드 핵심) */}
+                  {/* 하단 답글 카운트 뱃지 */}
                   <div className="flex items-center gap-2 text-[11px] text-[#5f6368]">
                     <span className="inline-flex items-center gap-1 text-[#1a73e8] font-medium bg-[#e8f0fe] px-2 py-0.5 rounded-md">
                       <span className="material-symbols-outlined text-[13px]">forum</span>
@@ -240,12 +262,12 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
       {/* 새 대화 시작: 친구 선택 모달 */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl flex flex-col max-h-[82vh]">
             {/* 모달 헤더 */}
             <div className="flex items-center justify-between pb-3 border-b border-[#e0e3e7]">
               <div>
                 <h3 className="text-[17px] font-bold text-[#1f1f1f]">새 대화 시작하기</h3>
-                <p className="text-[12px] text-[#5f6368] mt-0.5">대화할 상대를 선택하여 새 스레드를 엽니다</p>
+                <p className="text-[12px] text-[#5f6368] mt-0.5">상대를 선택하여 새 대화방을 엽니다</p>
               </div>
               <button
                 onClick={() => {
@@ -258,17 +280,45 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
               </button>
             </div>
 
+            {/* AI와 대화하기 최우선 옵션 카드 */}
+            <div className="py-3 border-b border-[#e0e3e7]">
+              <div
+                onClick={() => handleSelectFriendToChat(DEFAULT_AI_FRIEND)}
+                className="p-3 bg-gradient-to-r from-[#e8f0fe] via-[#f0f4f9] to-[#e6f4ea] border border-[#b8d7ff] rounded-2xl cursor-pointer hover:shadow-md active:scale-98 transition-all flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#1a73e8] text-white flex items-center justify-center font-bold text-sm shadow-sm group-hover:scale-105 transition-transform">
+                    <span className="material-symbols-outlined text-[22px]">smart_toy</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[14px] font-bold text-[#1f1f1f]">AI와 대화하기</span>
+                      <span className="text-[10px] bg-[#1a73e8] text-white font-semibold px-1.5 py-0.2 rounded-full">
+                        Gemini 3.5
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#5f6368]">실시간 AI 파트너와 바로 회화 시작</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 bg-[#1a73e8] text-white rounded-xl text-[12px] font-bold shadow-xs shrink-0"
+                >
+                  시작
+                </button>
+              </div>
+            </div>
+
             {/* 친구 검색창 */}
-            <div className="py-3">
+            <div className="py-2.5">
               <div className="relative flex items-center bg-[#f0f4f9] rounded-2xl px-3 py-2 border border-[#e0e3e7]">
                 <span className="material-symbols-outlined text-[#5f6368] text-[18px] mr-2">search</span>
                 <input
                   type="text"
-                  placeholder="친구 이름 또는 이메일 검색..."
+                  placeholder="회화 친구 이름 또는 이메일 검색..."
                   value={friendSearch}
                   onChange={(e) => setFriendSearch(e.target.value)}
                   className="w-full bg-transparent text-[13px] text-[#1f1f1f] outline-none placeholder-[#777586]"
-                  autoFocus
                 />
                 {friendSearch && (
                   <button onClick={() => setFriendSearch('')} className="text-[#5f6368]">
@@ -280,11 +330,10 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
 
             {/* 친구 목록 리스트 */}
             <div className="flex-1 overflow-y-auto divide-y divide-[#f0f4f9] space-y-1">
-              {filteredFriends.length === 0 ? (
-                <div className="py-10 text-center text-[#5f6368] space-y-2">
-                  <span className="material-symbols-outlined text-[36px] text-[#bfc6dd]">person_search</span>
-                  <p className="text-[13px]">
-                    {friends.length === 0 ? '등록된 친구가 없습니다.' : '검색 결과가 없습니다.'}
+              {filteredFriends.filter(f => !f.isAi).length === 0 ? (
+                <div className="py-6 text-center text-[#5f6368] space-y-1.5">
+                  <p className="text-[12px]">
+                    {friendSearch ? '검색된 친구가 없습니다.' : '추가된 다른 친구가 없습니다.'}
                   </p>
                   {onNavigateToFriends && (
                     <button
@@ -292,14 +341,14 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                         setShowModal(false);
                         onNavigateToFriends();
                       }}
-                      className="text-[12px] text-[#1a73e8] font-semibold underline mt-1"
+                      className="text-[12px] text-[#1a73e8] font-semibold underline block mx-auto"
                     >
-                      '회화 친구' 메뉴에서 그룹 멤버 추가하기 →
+                      '회화 친구' 메뉴에서 멤버 추가하기 →
                     </button>
                   )}
                 </div>
               ) : (
-                filteredFriends.map((friend) => {
+                filteredFriends.filter(f => !f.isAi).map((friend) => {
                   const friendThreadCount = threads.filter(t => t.partnerName === friend.name).length;
 
                   return (
@@ -325,16 +374,9 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[14px] font-bold text-[#1f1f1f] truncate">
-                              {friend.name}
-                            </span>
-                            {friend.isAi && (
-                              <span className="text-[10px] font-semibold bg-[#e8f0fe] text-[#1a73e8] px-1.5 py-0.5 rounded-full">
-                                AI
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-[14px] font-bold text-[#1f1f1f] truncate block">
+                            {friend.name}
+                          </span>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {friend.email && (
                               <p className="text-[11px] text-[#5f6368] truncate">
@@ -343,7 +385,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                             )}
                             {friendThreadCount > 0 && (
                               <span className="text-[10px] text-[#1a73e8] font-medium bg-[#e8f0fe] px-1.5 py-0.2 rounded shrink-0">
-                                기존 대화 {friendThreadCount}개
+                                대화 {friendThreadCount}개
                               </span>
                             )}
                           </div>
@@ -352,7 +394,7 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
 
                       <button
                         type="button"
-                        className="px-3 py-1.5 bg-[#1a73e8] text-white rounded-xl text-[12px] font-semibold hover:bg-[#1557b0] shrink-0"
+                        className="px-3 py-1.5 bg-[#f0f4f9] hover:bg-[#e0e3e7] text-[#1f1f1f] rounded-xl text-[12px] font-semibold shrink-0"
                       >
                         새 대화
                       </button>
