@@ -5,6 +5,11 @@ export const GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b";
 export const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+export interface AssistantReplyData {
+  reply: string;
+  translation: MessageTranslation;
+}
+
 // 추천 카드 정렬 기준 (Polite -> Natural -> Casual)
 export const TONE_ORDER: Record<string, number> = {
   'Polite': 1,
@@ -452,30 +457,52 @@ Respond ONLY with valid JSON.`;
     };
   },
 
-  // AI 파트너의 실시간 답변 생성 (Gemini -> Groq -> 로컬 규칙)
-  async generateAssistantReplyAsync(partnerName: string, userText: string): Promise<string> {
+  // AI 파트너의 실시간 답변 및 한국어 해석/핵심표현 일괄 생성 (Gemini -> Groq -> 로컬 규칙)
+  async generateAssistantReplyAsync(partnerName: string, userText: string): Promise<AssistantReplyData> {
+    const prompt = `You are ${partnerName}, a close friend having an English conversation with the user.
+The user said to you in English: "${userText}"
+
+Generate a natural conversational response in English (1 to 2 sentences with a warm follow-up question), AND provide its natural Korean translation and 1 to 2 key expressions.
+
+Respond ONLY with valid JSON:
+{
+  "reply": "English spoken response (1-2 sentences)",
+  "translation": "자연스러운 한국어 해석",
+  "keyExpressions": [
+    { "phrase": "key idiom or word in English", "meaning": "한국어 의미" }
+  ]
+}`;
+
     // 1. Gemini API 우선 (gemini-3.5-flash-lite)
     const geminiKey = getGeminiApiKey();
     if (geminiKey) {
       try {
-        const prompt = `You are ${partnerName}, an English conversation partner for a friendly English learner.
-The user said to you in English: "${userText}"
-
-Reply naturally, warmly, and concisely (1 to 2 sentences in conversational spoken English).
-Ask a friendly follow-up question to keep the chat going smoothly.`;
-
         const res = await fetch(`${GEMINI_API_BASE}/${GEMINI_DEFAULT_MODEL}:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
           })
         });
 
         if (res.ok) {
           const data = await res.json();
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply) return reply.trim();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (parsed.reply) {
+              const result: AssistantReplyData = {
+                reply: parsed.reply.trim(),
+                translation: {
+                  translation: parsed.translation || '',
+                  keyExpressions: Array.isArray(parsed.keyExpressions) ? parsed.keyExpressions : []
+                }
+              };
+              translationCache.set(result.reply, result.translation);
+              return result;
+            }
+          }
         }
       } catch (e) {
         console.warn("Gemini reply error, trying Groq fallback:", e);
@@ -493,19 +520,33 @@ Ask a friendly follow-up question to keep the chat going smoothly.`;
             messages: [
               {
                 role: "system",
-                content: `You are ${partnerName}, a close friend having an English conversation with the user. Reply warmly, naturally, and concisely (1 to 2 sentences in authentic spoken English). Ask a friendly follow-up question to keep the chat going smoothly.`
+                content: "You are an English conversation partner and language coach. Always output strictly valid JSON."
               },
               {
                 role: "user",
-                content: userText
+                content: prompt
               }
             ],
+            response_format: { type: "json_object" },
             temperature: 0.7,
-            max_tokens: 150
+            max_tokens: 300
           });
 
-          const reply = chatCompletion.choices[0]?.message?.content;
-          if (reply) return reply.trim();
+          const content = chatCompletion.choices[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            if (parsed.reply) {
+              const result: AssistantReplyData = {
+                reply: parsed.reply.trim(),
+                translation: {
+                  translation: parsed.translation || '',
+                  keyExpressions: Array.isArray(parsed.keyExpressions) ? parsed.keyExpressions : []
+                }
+              };
+              translationCache.set(result.reply, result.translation);
+              return result;
+            }
+          }
         }
       } catch (e) {
         console.warn("Groq SDK reply error, fallback to local:", e);
@@ -516,24 +557,82 @@ Ask a friendly follow-up question to keep the chat going smoothly.`;
     return this.generateAssistantReply(partnerName, userText);
   },
 
-  // AI 상대방의 자연스러운 답장 생성 (로컬 규칙)
-  generateAssistantReply(partnerName: string, userText: string): string {
+  // AI 상대방의 자연스러운 답장 및 사전 해석 생성 (로컬 규칙)
+  generateAssistantReply(partnerName: string, userText: string): AssistantReplyData {
     const textLower = userText.toLowerCase();
 
     if (textLower.includes('ramen') || textLower.includes('noodle') || textLower.includes('rain') || textLower.includes('umbrella')) {
-      return `Haha, honestly nothing beats a steaming bowl of noodles after getting caught in the chilly rain! 🍜 Did you try a new spot or your favorite place?`;
-    }
-    if (textLower.includes('coffee') || textLower.includes('cafe') || textLower.includes('tea')) {
-      return `A coffee break sounds wonderful! ☕ There's a cozy new cafe with great pastries nearby. What time works best for you?`;
-    }
-    if (textLower.includes('hello') || textLower.includes('hi') || textLower.includes('hey')) {
-      return `Hey there! It's great to hear from you. How has your day been treating you so far?`;
-    }
-    if (textLower.includes('tired') || textLower.includes('exhausted') || textLower.includes('busy')) {
-      return `Oh, take care of yourself! Sounds like you've been working really hard. Do you have any relaxing plans for tonight?`;
+      const res: AssistantReplyData = {
+        reply: `Haha, honestly nothing beats a steaming bowl of noodles after getting caught in the chilly rain! 🍜 Did you try a new spot or your favorite place?`,
+        translation: {
+          translation: `하하, 쌀쌀한 비를 맞고 나서는 뜨끈한 국수 한 그릇만 한 게 없죠! 🍜 새로운 식당에 가보셨나요, 아니면 자주 가시던 단골집인가요?`,
+          keyExpressions: [
+            { phrase: "nothing beats ~", meaning: "~만 한 게 없다, 최고다" },
+            { phrase: "get caught in the rain", meaning: "갑작스러운 비를 만나다" }
+          ]
+        }
+      };
+      translationCache.set(res.reply, res.translation);
+      return res;
     }
 
-    return `That makes so much sense! I really appreciate you sharing that. What's on your mind right now?`;
+    if (textLower.includes('coffee') || textLower.includes('cafe') || textLower.includes('tea')) {
+      const res: AssistantReplyData = {
+        reply: `A coffee break sounds wonderful! ☕ There's a cozy new cafe with great pastries nearby. What time works best for you?`,
+        translation: {
+          translation: `커피 한 잔 너무 좋죠! ☕ 근처에 맛있는 디저트가 있는 아늑한 신상 카페가 있어요. 몇 시가 가장 편하세요?`,
+          keyExpressions: [
+            { phrase: "sounds wonderful", meaning: "정말 좋다, 듣던 중 반가운 소리다" },
+            { phrase: "works best for you", meaning: "너에게 가장 편하다" }
+          ]
+        }
+      };
+      translationCache.set(res.reply, res.translation);
+      return res;
+    }
+
+    if (textLower.includes('hello') || textLower.includes('hi') || textLower.includes('hey')) {
+      const res: AssistantReplyData = {
+        reply: `Hey there! It's great to hear from you. How has your day been treating you so far?`,
+        translation: {
+          translation: `안녕! 연락 줘서 반가워요. 오늘 하루는 어떻게 보내고 계신가요?`,
+          keyExpressions: [
+            { phrase: "great to hear from you", meaning: "연락 줘서 반갑다" },
+            { phrase: "so far", meaning: "지금까지, 여태까지" }
+          ]
+        }
+      };
+      translationCache.set(res.reply, res.translation);
+      return res;
+    }
+
+    if (textLower.includes('tired') || textLower.includes('exhausted') || textLower.includes('busy')) {
+      const res: AssistantReplyData = {
+        reply: `Oh, take care of yourself! Sounds like you've been working really hard. Do you have any relaxing plans for tonight?`,
+        translation: {
+          translation: `어휴, 몸 잘 챙기세요! 정말 열심히 일하셨나 봐요. 오늘 밤엔 편하게 쉴 계획이 있으신가요?`,
+          keyExpressions: [
+            { phrase: "take care of yourself", meaning: "몸조심하다, 무리하지 않다" },
+            { phrase: "relaxing plans", meaning: "편안한 휴식 계획" }
+          ]
+        }
+      };
+      translationCache.set(res.reply, res.translation);
+      return res;
+    }
+
+    const def: AssistantReplyData = {
+      reply: `That makes so much sense! I really appreciate you sharing that. What's on your mind right now?`,
+      translation: {
+        translation: `정말 공감돼요! 이야기해 줘서 고마워요. 지금 어떤 생각하고 계신가요?`,
+        keyExpressions: [
+          { phrase: "makes so much sense", meaning: "완전 이해되다, 정말 공감되다" },
+          { phrase: "on your mind", meaning: "마음에 두고 있는, 생각 중인" }
+        ]
+      }
+    };
+    translationCache.set(def.reply, def.translation);
+    return def;
   },
 
   // 말풍선 한국어 해석 및 핵심 표현 아코디언 제공 (Gemini -> Groq -> 캐싱)

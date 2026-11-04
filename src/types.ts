@@ -28,6 +28,7 @@ export interface MessageAnalysis {
   improvedVersion: string;
   explanation: string;
   keyVocabulary: { word: string; meaning: string; phonetic?: string }[];
+  translation?: string;
 }
 
 export interface MessageTranslation {

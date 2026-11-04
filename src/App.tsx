@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MainTab, Thread, Message, SavedExpression, SavedScript, RecommendationCard, Friend, GroupMember } from './types';
+import { MainTab, Thread, Message, MessageTranslation, SavedExpression, SavedScript, RecommendationCard, Friend, GroupMember } from './types';
 import { storageService, DEFAULT_FRIENDS } from './services/storageService';
 import { aiService } from './services/aiService';
 import { Header } from './components/Header';
@@ -121,6 +121,21 @@ const MainApp: React.FC = () => {
       ? 'Hi there! Ready to practice English conversation today?' 
       : `Hi! Let's chat in English! 😊`;
 
+    const greetingTranslation: MessageTranslation = friend.isAi
+      ? {
+          translation: '안녕하세요! 오늘 영어 회화 연습할 준비되셨나요?',
+          keyExpressions: [
+            { phrase: 'Ready to ~', meaning: '~할 준비가 된' },
+            { phrase: 'practice', meaning: '연습하다, 실전 훈련하다' }
+          ]
+        }
+      : {
+          translation: '안녕! 우리 영어로 대화해 봐요! 😊',
+          keyExpressions: [
+            { phrase: "Let's chat", meaning: '우리 이야기 나눠보자' }
+          ]
+        };
+
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
       partnerName: friend.name,
@@ -132,12 +147,13 @@ const MainApp: React.FC = () => {
       updatedAt: Date.now()
     };
 
-    // 3. 친구의 첫 인사 메시지 자동 생성
+    // 3. 친구의 첫 인사 메시지 자동 생성 (해석 및 표현 사전 포함)
     const greetingMsg: Message = {
       id: `msg-greeting-${Date.now()}`,
       sender: 'assistant',
       text: greetingText,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      translation: greetingTranslation
     };
 
     const updated = [newThread, ...threads];
@@ -207,6 +223,14 @@ const MainApp: React.FC = () => {
     if (!activeThread) return;
 
     // 1. 유저 메시지 화면에 0ms 즉시 추가
+    const matchedRec = recommendations?.find(r => r.english === text);
+    const initialTranslation: MessageTranslation | undefined = (koreanDraft || matchedRec) ? {
+      translation: koreanDraft || matchedRec?.koreanMeaning || text,
+      keyExpressions: matchedRec?.grammarTip 
+        ? [{ phrase: matchedRec.english.split(' ').slice(0, 3).join(' '), meaning: matchedRec.grammarTip }]
+        : []
+    } : undefined;
+
     const userMsgId = `msg-${Date.now()}`;
     const userMsg: Message = {
       id: userMsgId,
@@ -214,7 +238,8 @@ const MainApp: React.FC = () => {
       text,
       koreanDraft,
       timestamp: Date.now(),
-      recommendations
+      recommendations,
+      translation: initialTranslation
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -224,22 +249,32 @@ const MainApp: React.FC = () => {
     // 2. 비동기 백그라운드 문법/표현 심화 분석 (UI 블로킹 없음)
     aiService.analyzeMessageAsync(text, koreanDraft).then(async (analysis) => {
       if (analysis) {
-        setMessages((prev) => prev.map(m => m.id === userMsgId ? { ...m, analysis } : m));
+        setMessages((prev) => prev.map(m => {
+          if (m.id === userMsgId) {
+            const updatedTranslation = m.translation || (analysis.translation ? {
+              translation: analysis.translation,
+              keyExpressions: analysis.keyVocabulary.map(v => ({ phrase: v.word, meaning: v.meaning }))
+            } : undefined);
+            return { ...m, analysis, translation: updatedTranslation };
+          }
+          return m;
+        }));
         await storageService.saveMessage(activeThread.id, { ...userMsg, analysis });
       }
     }).catch(e => console.warn("Background analysis error:", e));
 
-    // 3. AI 파트너의 응답 생성 (인위적 딜레이 없이 즉시 호출)
+    // 3. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
     try {
-      const replyText = await aiService.generateAssistantReplyAsync(
+      const replyData = await aiService.generateAssistantReplyAsync(
         activeThread.partnerName, 
         text
       );
       const assistantMsg: Message = {
         id: `msg-ai-${Date.now()}`,
         sender: 'assistant',
-        text: replyText,
-        timestamp: Date.now()
+        text: replyData.reply,
+        timestamp: Date.now(),
+        translation: replyData.translation
       };
       setMessages((prev) => [...prev, assistantMsg]);
       await storageService.saveMessage(activeThread.id, assistantMsg);

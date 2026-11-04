@@ -20,9 +20,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [isDebouncing, setIsDebouncing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
-  // 말풍선 해석 아코디언 상태 관리 (msgId -> Translation)
-  const [expandedTranslations, setExpandedTranslations] = useState<Record<string, MessageTranslation | null>>({});
-  const [loadingTranslations, setLoadingTranslations] = useState<Record<string, boolean>>({});
+  // 말풍선 한국어 해석 아코디언 펼침 여부 상태 (0ms 즉시 토글)
+  const [expandedMsgIds, setExpandedMsgIds] = useState<Record<string, boolean>>({});
+  // 레거시 메시지 등 translation이 누락된 경우에만 보조 캐시
+  const [fallbackTranslations, setFallbackTranslations] = useState<Record<string, MessageTranslation>>({});
 
   // AI 빠른 답장 칩 상태
   const [smartReplies, setSmartReplies] = useState<string[]>([
@@ -30,7 +31,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     "I'd love to! Tell me more.",
     "Actually, I'm a bit tied up right now."
   ]);
-  const [loadingSmartReplies, setLoadingSmartReplies] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
@@ -39,14 +39,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 스크롤 맨 아래로 이동
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, recommendations, expandedTranslations]);
+  }, [messages, recommendations, expandedMsgIds]);
 
   // 대화 맥락이 바뀔 때 AI 스마트 답장 생성
   useEffect(() => {
     let isCancelled = false;
     const fetchSmartReplies = async () => {
       if (messages.length === 0) return;
-      setLoadingSmartReplies(true);
       try {
         const replies = await aiService.generateSmartRepliesAsync(messages, activeThread.partnerName);
         if (!isCancelled && replies && replies.length > 0) {
@@ -54,8 +53,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
         }
       } catch (e) {
         console.warn("Smart replies fetch error:", e);
-      } finally {
-        if (!isCancelled) setLoadingSmartReplies(false);
       }
     };
 
@@ -69,7 +66,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setInputText(val);
     latestInputRef.current = val;
 
-    // 이전 디바운스 타이머 취소
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -81,7 +77,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       return;
     }
 
-    // 디바운스 로딩 표시 시작
     setIsDebouncing(true);
 
     debounceTimerRef.current = setTimeout(async () => {
@@ -93,7 +88,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
 
       try {
-        // Gemini 3.5 Flash-Lite (또는 Groq 백업) 1회 호출
         const aiRecs = await aiService.generateRecommendationsAsync(currentVal);
         if (latestInputRef.current.trim() === currentVal) {
           setRecommendations(aiRecs || []);
@@ -103,7 +97,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       } finally {
         setIsDebouncing(false);
       }
-    }, 400); // 400ms 디바운스
+    }, 400);
   };
 
   // 텍스트 직접 전송 (0ms 즉시 전송)
@@ -130,25 +124,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
     handleSend(rec.english, inputText);
   };
 
-  // 말풍선 해석보기 토글 (아코디언 미니멀)
-  const handleToggleTranslation = async (msgId: string, englishText: string) => {
-    // 이미 펼쳐져 있으면 닫기
-    if (expandedTranslations[msgId] !== undefined) {
-      const copy = { ...expandedTranslations };
-      delete copy[msgId];
-      setExpandedTranslations(copy);
+  // 말풍선 한국어 해석('한') 토글: 이미 사전 일괄 생성되어 있어 0ms 즉시 펼침/닫힘
+  const handleToggleTranslation = async (msgId: string, englishText: string, currentTranslation?: MessageTranslation) => {
+    // 1. 이미 열려 있으면 닫기
+    if (expandedMsgIds[msgId]) {
+      setExpandedMsgIds(prev => ({ ...prev, [msgId]: false }));
       return;
     }
 
-    // 번역 데이터 로드
-    setLoadingTranslations(prev => ({ ...prev, [msgId]: true }));
-    try {
-      const data = await aiService.translateMessageAsync(englishText);
-      setExpandedTranslations(prev => ({ ...prev, [msgId]: data }));
-    } catch (e) {
-      console.warn("Translation load error:", e);
-    } finally {
-      setLoadingTranslations(prev => ({ ...prev, [msgId]: false }));
+    // 2. 사전 생성된 데이터로 즉시 열기 (0ms 딜레이)
+    setExpandedMsgIds(prev => ({ ...prev, [msgId]: true }));
+
+    // 3. 레거시 메시지 등 translation이 누락된 경우에만 백그라운드 보조 로드
+    if (!currentTranslation && !fallbackTranslations[msgId]) {
+      try {
+        const data = await aiService.translateMessageAsync(englishText);
+        setFallbackTranslations(prev => ({ ...prev, [msgId]: data }));
+      } catch (e) {
+        console.warn("Fallback translation error:", e);
+      }
     }
   };
 
@@ -158,9 +152,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3.5">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
-          const isTranslated = expandedTranslations[msg.id] !== undefined;
-          const translationData = expandedTranslations[msg.id];
-          const isLoadingTrans = loadingTranslations[msg.id];
+          const isExpanded = Boolean(expandedMsgIds[msg.id]);
+          const translationData = msg.translation || fallbackTranslations[msg.id];
 
           return (
             <div
@@ -194,23 +187,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </div>
                   )}
 
-                  {/* 말풍선 하단: 해석보기 아코디언 토글 버튼 */}
+                  {/* 말풍선 하단: 심플한 '한' 한국어 토글 아이콘 버튼 */}
                   <div className={`mt-2 pt-1.5 border-t flex items-center justify-between gap-2 ${
                     isUser ? 'border-white/20' : 'border-[#f1f3f4]'
                   }`}>
                     <button
                       type="button"
-                      onClick={() => handleToggleTranslation(msg.id, msg.text)}
-                      className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors ${
+                      onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
+                      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all active:scale-95 ${
                         isUser 
-                          ? 'text-white/85 hover:text-white' 
-                          : 'text-[#1a73e8] hover:text-[#1557b0]'
+                          ? 'bg-white/20 text-white hover:bg-white/30 border border-white/25' 
+                          : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff] border border-[#d2e3fc]'
                       }`}
+                      title={isExpanded ? '한국어 해석 접기' : '한국어 해석 보기'}
                     >
-                      <span className="material-symbols-outlined text-[14px]">
-                        {isTranslated ? 'expand_less' : 'translate'}
+                      <span className="font-bold text-[11px] tracking-tight">한</span>
+                      <span className="material-symbols-outlined text-[13px] leading-none">
+                        {isExpanded ? 'expand_less' : 'expand_more'}
                       </span>
-                      <span>{isTranslated ? '해석 닫기' : '해석 및 핵심표현'}</span>
                     </button>
 
                     {isUser && msg.analysis && (
@@ -224,47 +218,31 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     )}
                   </div>
 
-                  {/* 해석 로딩 중 인디케이터 */}
-                  {isLoadingTrans && (
-                    <div className={`mt-2 p-2 rounded-xl text-[11px] flex items-center gap-1.5 animate-pulse ${
-                      isUser ? 'bg-white/15 text-white' : 'bg-[#f8fafd] text-[#5f6368] border border-[#e0e3e7]'
-                    }`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping"></span>
-                      AI 해석 및 표현 추출 중...
-                    </div>
-                  )}
-
-                  {/* 미니멀 해석 & 핵심표현 아코디언 본체 */}
-                  {isTranslated && translationData && (
-                    <div className={`mt-2 p-2.5 rounded-xl text-left space-y-2 text-[12px] animate-in fade-in-50 duration-200 ${
+                  {/* 미니멀 한국어 해석 & 핵심표현 아코디언 본체 (이미 생성되어 있어 0ms 즉시 표시) */}
+                  {isExpanded && (
+                    <div className={`mt-2 p-2.5 rounded-xl text-left space-y-1.5 text-[12px] animate-in fade-in-50 duration-150 ${
                       isUser 
                         ? 'bg-white/15 text-white border border-white/20' 
                         : 'bg-[#f8fafd] text-[#1f1f1f] border border-[#dadce0]'
                     }`}>
                       {/* 한국어 번역 */}
                       <div>
-                        <span className={`text-[10px] font-bold block mb-0.5 ${
-                          isUser ? 'text-white/80' : 'text-[#1a73e8]'
-                        }`}>
-                          한국어 해석
-                        </span>
-                        <p className="leading-snug">
-                          {translationData.translation || '해석이 제공되지 않았습니다.'}
+                        <p className="leading-snug font-medium">
+                          {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
                         </p>
                       </div>
 
-                      {/* 핵심 표현 */}
-                      {translationData.keyExpressions && translationData.keyExpressions.length > 0 && (
+                      {/* 핵심 표현 및 숙어 */}
+                      {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
                         <div className={`pt-1.5 border-t ${isUser ? 'border-white/15' : 'border-[#e0e3e7]'}`}>
-                          <span className={`text-[10px] font-bold block mb-1 ${
-                            isUser ? 'text-white/80' : 'text-[#5f6368]'
-                          }`}>
-                            핵심 표현 및 숙어
-                          </span>
                           <div className="space-y-1">
                             {translationData.keyExpressions.map((exp, i) => (
                               <div key={i} className="flex items-start gap-1 text-[11px]">
-                                <span className="font-semibold text-[#1a73e8] shrink-0 bg-white/70 px-1.5 py-0.2 rounded border border-[#c2e7ff]">
+                                <span className={`font-semibold shrink-0 px-1.5 py-0.2 rounded border ${
+                                  isUser 
+                                    ? 'bg-white/20 text-white border-white/30' 
+                                    : 'bg-[#e8f0fe] text-[#1a73e8] border-[#c2e7ff]'
+                                }`}>
                                   {exp.phrase}
                                 </span>
                                 <span className={isUser ? 'text-white/90' : 'text-[#444746]'}>
