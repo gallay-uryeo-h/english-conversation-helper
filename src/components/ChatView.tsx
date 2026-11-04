@@ -190,9 +190,23 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* 1. 메시지 리스트 영역 (스마트 스크롤 & 키보드 빈공간 축소) */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain flex flex-col"
       >
-        {messages.map((msg) => {
+        {messages.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[#747775] my-auto">
+            <div 
+              className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mb-3 shadow-xs ring-1 ring-black/5"
+              style={{ backgroundColor: activeThread.avatarBg, color: '#1f1f1f' }}
+            >
+              {activeThread.avatarText}
+            </div>
+            <p className="font-bold text-[16px] text-[#1f1f1f] mb-1">{activeThread.partnerName}</p>
+            <p className="text-[13px] text-[#5f6368] leading-relaxed max-w-xs">
+              한글로 생각하신 문장이나 영어로 편하게 첫 대화를 시작해보세요!
+            </p>
+          </div>
+        ) : (
+          messages.map((msg) => {
           const isUser = msg.sender === 'user';
           const isExpanded = Boolean(expandedMsgIds[msg.id]);
           const translationData = msg.translation || fallbackTranslations[msg.id];
@@ -280,25 +294,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
 
-      {/* 2. AI 스마트 빠른 답장 칩 목록 (사전 번역 탑재) */}
-      <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-        <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
-          <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
-          빠른 답장:
-        </span>
-        {smartReplies.map((item, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleSend(item.reply, undefined, item.translation)}
-            className="px-3 py-1 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0"
-          >
-            {item.reply}
-          </button>
-        ))}
-      </div>
+      {/* 2. AI 스마트 빠른 답장 칩 목록 (사전 번역 탑재, 대화가 있을 때만 표시) */}
+      {messages.length > 0 && smartReplies.length > 0 && (
+        <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+          <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
+            빠른 답장:
+          </span>
+          {smartReplies.map((item, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleSend(item.reply, undefined, item.translation)}
+              className="px-3 py-1 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0"
+            >
+              {item.reply}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 3. 디바운스 로딩 인디케이터 */}
       {isDebouncing && (

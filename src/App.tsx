@@ -61,7 +61,11 @@ const MainApp: React.FC = () => {
         setThreads(fetchedThreads);
         if (fetchedThreads.length > 0) {
           setActiveThread(fetchedThreads[0]);
-          const msgs = await storageService.getMessages(fetchedThreads[0].id);
+          let msgs = await storageService.getMessages(fetchedThreads[0].id);
+          // 레거시 또는 이전 자동 생성 첫 인사만 남아있는 경우 빈 방으로 정리
+          if (msgs.length === 1 && (msgs[0].id.startsWith('msg-greeting') || msgs[0].text.includes('Ready to practice') || msgs[0].text.includes("Let's chat in English"))) {
+            msgs = [];
+          }
           setMessages(msgs);
         } else {
           setActiveThread(null);
@@ -108,58 +112,32 @@ const MainApp: React.FC = () => {
     if (!forceNew) {
       const existing = threads.find(t => t.partnerName === friend.name);
       if (existing) {
-        const msgs = await storageService.getMessages(existing.id);
+        let msgs = await storageService.getMessages(existing.id);
+        // 레거시 또는 이전 자동 생성 첫 인사만 남아있는 경우 빈 방으로 시작
+        if (msgs.length === 1 && (msgs[0].id.startsWith('msg-greeting') || msgs[0].text.includes('Ready to practice') || msgs[0].text.includes("Let's chat in English"))) {
+          msgs = [];
+        }
         openChatScreen(existing, msgs);
         return;
       }
     }
 
-    // 2. 새 구글챗 스타일 스레드 개설
-    const greetingText = friend.isAi 
-      ? 'Hi there! Ready to practice English conversation today?' 
-      : `Hi! Let's chat in English! 😊`;
-
-    const greetingTranslation: MessageTranslation = friend.isAi
-      ? {
-          translation: '안녕하세요! 오늘 영어 회화 연습할 준비되셨나요?',
-          keyExpressions: [
-            { phrase: 'Ready to ~', meaning: '~할 준비가 된' },
-            { phrase: 'practice', meaning: '연습하다, 실전 훈련하다' }
-          ]
-        }
-      : {
-          translation: '안녕! 우리 영어로 대화해 봐요! 😊',
-          keyExpressions: [
-            { phrase: "Let's chat", meaning: '우리 이야기 나눠보자' }
-          ]
-        };
-
+    // 2. 새 대화방 개설 (첫 문장을 미리 주지 않고 유저가 직접 입력하여 시작)
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
       partnerName: friend.name,
       avatarBg: friend.avatarBg,
       avatarText: friend.avatarText,
-      lastMessage: greetingText,
-      lastSender: 'assistant',
-      messageCount: 1,
+      lastMessage: '대화를 시작해보세요.',
+      messageCount: 0,
       updatedAt: Date.now()
-    };
-
-    // 3. 친구의 첫 인사 메시지 자동 생성 (해석 및 표현 사전 포함)
-    const greetingMsg: Message = {
-      id: `msg-greeting-${Date.now()}`,
-      sender: 'assistant',
-      text: greetingText,
-      timestamp: Date.now(),
-      translation: greetingTranslation
     };
 
     const updated = [newThread, ...threads];
     setThreads(updated);
-    openChatScreen(newThread, [greetingMsg]);
+    openChatScreen(newThread, []);
 
     await storageService.saveThread(newThread);
-    await storageService.saveMessage(newThread.id, greetingMsg);
   };
 
   // 새 친구 추가
@@ -170,7 +148,10 @@ const MainApp: React.FC = () => {
 
   // 활성 스레드 선택하여 대화방 입장
   const handleSelectThread = async (thread: Thread) => {
-    const msgs = await storageService.getMessages(thread.id);
+    let msgs = await storageService.getMessages(thread.id);
+    if (msgs.length === 1 && (msgs[0].id.startsWith('msg-greeting') || msgs[0].text.includes('Ready to practice') || msgs[0].text.includes("Let's chat in English"))) {
+      msgs = [];
+    }
     openChatScreen(thread, msgs);
   };
 
