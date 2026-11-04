@@ -177,7 +177,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       : 'bg-white text-[#1f1f1f] border border-[#e0e3e7] rounded-tl-xs'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap select-text">{msg.text}</p>
+                  {/* 문장 텍스트 및 문장 끝 초미니멀 '한' 인라인 토글 버튼 */}
+                  <p className="whitespace-pre-wrap select-text leading-relaxed">
+                    <span>{msg.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
+                      className={`inline-flex items-center gap-0.5 ml-1.5 align-baseline transition-opacity active:scale-95 cursor-pointer select-none ${
+                        isUser 
+                          ? 'text-white/70 hover:text-white' 
+                          : 'text-[#747775] hover:text-[#1a73e8]'
+                      }`}
+                      title={isExpanded ? '한국어 해석 접기' : '한국어 해석 보기'}
+                    >
+                      <span className="text-[11px] font-bold tracking-tight">한</span>
+                      <span className="material-symbols-outlined text-[13px] leading-none">
+                        {isExpanded ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </button>
+                  </p>
 
                   {/* 한글 원문 초안이 있는 경우 표시 */}
                   {msg.koreanDraft && (
@@ -187,76 +205,48 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </div>
                   )}
 
-                  {/* 말풍선 하단: 심플한 '한' 한국어 토글 아이콘 버튼 */}
-                  <div className={`mt-2 pt-1.5 border-t flex items-center justify-between gap-2 ${
-                    isUser ? 'border-white/20' : 'border-[#f1f3f4]'
-                  }`}>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
-                      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all active:scale-95 ${
-                        isUser 
-                          ? 'bg-white/20 text-white hover:bg-white/30 border border-white/25' 
-                          : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff] border border-[#d2e3fc]'
-                      }`}
-                      title={isExpanded ? '한국어 해석 접기' : '한국어 해석 보기'}
-                    >
-                      <span className="font-bold text-[11px] tracking-tight">한</span>
-                      <span className="material-symbols-outlined text-[13px] leading-none">
-                        {isExpanded ? 'expand_less' : 'expand_more'}
-                      </span>
-                    </button>
-
-                    {isUser && msg.analysis && (
-                      <button
-                        onClick={() => onSelectMessageForAnalysis(msg)}
-                        className="inline-flex items-center gap-0.5 text-[11px] text-white font-medium hover:underline opacity-90"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">insights</span>
-                        피드백 ({msg.analysis.grammarScore}점)
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 미니멀 한국어 해석 & 핵심표현 아코디언 본체 (이미 생성되어 있어 0ms 즉시 표시) */}
+                  {/* 미니멀 한국어 해석 & 핵심표현 아코디언 본체 (0ms 즉시 표시) */}
                   {isExpanded && (
-                    <div className={`mt-2 p-2.5 rounded-xl text-left space-y-1.5 text-[12px] animate-in fade-in-50 duration-150 ${
-                      isUser 
-                        ? 'bg-white/15 text-white border border-white/20' 
-                        : 'bg-[#f8fafd] text-[#1f1f1f] border border-[#dadce0]'
+                    <div className={`mt-2 pt-2 border-t text-left space-y-1.5 text-[12px] animate-in fade-in-50 duration-150 ${
+                      isUser ? 'border-white/20 text-white/95' : 'border-[#e0e3e7] text-[#1f1f1f]'
                     }`}>
                       {/* 한국어 번역 */}
-                      <div>
-                        <p className="leading-snug font-medium">
-                          {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
-                        </p>
-                      </div>
+                      <p className="leading-snug">
+                        {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
+                      </p>
 
                       {/* 핵심 표현 및 숙어 */}
                       {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
-                        <div className={`pt-1.5 border-t ${isUser ? 'border-white/15' : 'border-[#e0e3e7]'}`}>
-                          <div className="space-y-1">
-                            {translationData.keyExpressions.map((exp, i) => (
-                              <div key={i} className="flex items-start gap-1 text-[11px]">
-                                <span className={`font-semibold shrink-0 px-1.5 py-0.2 rounded border ${
-                                  isUser 
-                                    ? 'bg-white/20 text-white border-white/30' 
-                                    : 'bg-[#e8f0fe] text-[#1a73e8] border-[#c2e7ff]'
-                                }`}>
-                                  {exp.phrase}
-                                </span>
-                                <span className={isUser ? 'text-white/90' : 'text-[#444746]'}>
-                                  : {exp.meaning}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {translationData.keyExpressions.map((exp, i) => (
+                            <span
+                              key={i}
+                              className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                isUser 
+                                  ? 'bg-white/15 text-white' 
+                                  : 'bg-[#f0f4f9] text-[#1a73e8]'
+                              }`}
+                            >
+                              <strong className="font-semibold">{exp.phrase}</strong>: {exp.meaning}
+                            </span>
+                          ))}
                         </div>
                       )}
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* 유저 메시지 심화 피드백 버튼 (말풍선 외부 우하단 배치로 공간 절약) */}
+              {isUser && msg.analysis && (
+                <button
+                  onClick={() => onSelectMessageForAnalysis(msg)}
+                  className="inline-flex items-center gap-0.5 mt-1 mr-1 text-[11px] text-[#00897b] font-medium hover:underline opacity-90 self-end"
+                >
+                  <span className="material-symbols-outlined text-[13px]">insights</span>
+                  피드백 ({msg.analysis.grammarScore}점)
+                </button>
+              )}
             </div>
           );
         })}
