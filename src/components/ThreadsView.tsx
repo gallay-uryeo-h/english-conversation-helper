@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Thread, Friend } from '../types';
 import { DEFAULT_AI_FRIEND } from '../services/storageService';
 
@@ -27,6 +27,15 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [friendSearch, setFriendSearch] = useState('');
+  // 같은 친구와의 대화 아코디언 펼침/접힘 상태
+  const [expandedFriends, setExpandedFriends] = useState<Record<string, boolean>>({});
+
+  const toggleFriendAccordion = (partnerName: string) => {
+    setExpandedFriends(prev => ({
+      ...prev,
+      [partnerName]: !prev[partnerName]
+    }));
+  };
 
   const filteredThreads = threads.filter((t) => {
     if (filter === 'fav' && !t.isFavorite) return false;
@@ -39,6 +48,48 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
     }
     return true;
   });
+
+  // 같은 친구끼리 대화를 그룹화 (최신 대화순 정렬)
+  interface ThreadGroup {
+    partnerName: string;
+    avatarBg: string;
+    avatarText: string;
+    threads: Thread[];
+    latestThread: Thread;
+  }
+
+  const threadGroups = useMemo(() => {
+    const map = new Map<string, ThreadGroup>();
+
+    for (const thread of filteredThreads) {
+      const key = thread.partnerName;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          partnerName: thread.partnerName,
+          avatarBg: thread.avatarBg,
+          avatarText: thread.avatarText,
+          threads: [thread],
+          latestThread: thread
+        });
+      } else {
+        existing.threads.push(thread);
+        if (thread.updatedAt > existing.latestThread.updatedAt) {
+          existing.latestThread = thread;
+        }
+      }
+    }
+
+    // 그룹 내 대화 최신순 정렬
+    for (const group of map.values()) {
+      group.threads.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+
+    // 최신 대화가 발생한 친구 그룹 순으로 정렬
+    return Array.from(map.values()).sort(
+      (a, b) => b.latestThread.updatedAt - a.latestThread.updatedAt
+    );
+  }, [filteredThreads]);
 
   const filteredFriends = friends.filter((f) => {
     if (!friendSearch.trim()) return true;
@@ -165,84 +216,239 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
               )}
             </div>
           </div>
-        ) : filteredThreads.length === 0 ? (
+        ) : threadGroups.length === 0 ? (
           <div className="py-16 text-center text-[#5f6368]">
             <span className="material-symbols-outlined text-[48px] text-[#bfc6dd] mb-2">search_off</span>
             <p className="text-[14px]">검색 조건에 맞는 대화가 없습니다.</p>
           </div>
         ) : (
-          filteredThreads.map((thread) => {
-            const isSelected = thread.id === activeThreadId;
-            return (
-              <article
-                key={thread.id}
-                onClick={() => onSelectThread(thread)}
-                className={`thread-card flex items-start gap-3.5 px-4 py-3.5 cursor-pointer transition-colors active:bg-[#edf2fa] group relative ${
-                  isSelected ? 'bg-[#eef4ff]' : 'hover:bg-[#f8fafd]'
-                }`}
-              >
-                {/* 아바타 */}
-                <div className="relative shrink-0 mt-0.5">
-                  <div
-                    className="w-10 h-10 rounded-full font-semibold text-[15px] flex items-center justify-center ring-1 ring-black/5"
-                    style={{ backgroundColor: thread.avatarBg, color: '#1f1f1f' }}
-                  >
-                    {thread.avatarText}
-                  </div>
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#188038] border-2 border-white"></span>
-                </div>
+          threadGroups.map((group) => {
+            const isSingle = group.threads.length === 1;
+            const singleThread = group.threads[0];
+            const isExpanded = Boolean(expandedFriends[group.partnerName] || searchQuery.trim());
+            const hasActiveThread = group.threads.some(t => t.id === activeThreadId);
 
-                {/* 구글챗 스레드 정보 영역 */}
-                <div className="flex-1 min-w-0 pr-6">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="text-[14px] font-semibold text-[#1f1f1f] truncate">
-                        {thread.partnerName}
-                      </span>
-                      {thread.isFavorite && (
-                        <span className="text-[#fbbc04] text-[13px]">★</span>
-                      )}
+            // 1. 단일 대화방인 경우 (아코디언 불필요, 바로 표시)
+            if (isSingle) {
+              const isSelected = singleThread.id === activeThreadId;
+              return (
+                <article
+                  key={singleThread.id}
+                  onClick={() => onSelectThread(singleThread)}
+                  className={`thread-card flex items-start gap-3.5 px-4 py-3.5 cursor-pointer transition-colors active:bg-[#edf2fa] group relative ${
+                    isSelected ? 'bg-[#eef4ff]' : 'hover:bg-[#f8fafd]'
+                  }`}
+                >
+                  {/* 아바타 */}
+                  <div className="relative shrink-0 mt-0.5">
+                    <div
+                      className="w-10 h-10 rounded-full font-semibold text-[15px] flex items-center justify-center ring-1 ring-black/5"
+                      style={{ backgroundColor: singleThread.avatarBg, color: '#1f1f1f' }}
+                    >
+                      {singleThread.avatarText}
                     </div>
-                    <span className="text-[11px] text-[#5f6368] shrink-0 font-mono">
-                      {formatTime(thread.updatedAt)}
-                    </span>
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#188038] border-2 border-white"></span>
                   </div>
 
-                  {/* 최신 메시지 스니펫 (구글챗 스타일) */}
-                  <p className="text-[13px] text-[#3c4043] truncate mb-1">
-                    {thread.lastSender === 'user' ? (
-                      <span className="text-[#1a73e8] font-semibold">나: </span>
-                    ) : (
-                      <span className="font-semibold text-[#1f1f1f]">{thread.partnerName}: </span>
-                    )}
-                    <span>{thread.lastMessage || '대화를 시작해보세요.'}</span>
-                  </p>
+                  {/* 정보 영역 */}
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-[14px] font-semibold text-[#1f1f1f] truncate">
+                          {singleThread.partnerName}
+                        </span>
+                        {singleThread.isFavorite && (
+                          <span className="text-[#fbbc04] text-[13px]">★</span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-[#5f6368] shrink-0 font-mono">
+                        {formatTime(singleThread.updatedAt)}
+                      </span>
+                    </div>
 
-                  {/* 하단 답글 카운트 뱃지 */}
-                  <div className="flex items-center gap-2 text-[11px] text-[#5f6368]">
-                    <span className="inline-flex items-center gap-1 text-[#1a73e8] font-medium bg-[#e8f0fe] px-2 py-0.5 rounded-md">
-                      <span className="material-symbols-outlined text-[13px]">forum</span>
-                      답글 {thread.messageCount || 1}개
+                    {/* 최신 메시지 스니펫 */}
+                    <p className="text-[13px] text-[#3c4043] truncate">
+                      {singleThread.lastSender === 'user' ? (
+                        <span className="text-[#1a73e8] font-semibold">나: </span>
+                      ) : (
+                        <span className="font-semibold text-[#1f1f1f]">{singleThread.partnerName}: </span>
+                      )}
+                      <span>{singleThread.lastMessage || '대화를 시작해보세요.'}</span>
+                    </p>
+                  </div>
+
+                  {/* 삭제 버튼 */}
+                  {onDeleteThread && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`'${singleThread.partnerName}'님과의 대화방을 삭제하시겠습니까?`)) {
+                          onDeleteThread(singleThread.id);
+                        }
+                      }}
+                      className="absolute right-3 top-3 text-[#9aa0a6] hover:text-[#d93025] p-1.5 rounded-full hover:bg-black/5 transition-colors"
+                      title="대화방 삭제"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">delete</span>
+                    </button>
+                  )}
+                </article>
+              );
+            }
+
+            // 2. 같은 친구와의 대화가 여러 개 있는 경우 (아코디언 그룹)
+            return (
+              <div key={group.partnerName} className="border-b border-[#edf0f5] last:border-b-0">
+                {/* 아코디언 메인 헤더 카드 */}
+                <article
+                  onClick={() => toggleFriendAccordion(group.partnerName)}
+                  className={`flex items-start gap-3.5 px-4 py-3.5 cursor-pointer transition-colors active:bg-[#edf2fa] group relative select-none ${
+                    hasActiveThread ? 'bg-[#f0f6ff]' : 'hover:bg-[#f8fafd]'
+                  }`}
+                >
+                  {/* 아바타 */}
+                  <div className="relative shrink-0 mt-0.5">
+                    <div
+                      className="w-10 h-10 rounded-full font-semibold text-[15px] flex items-center justify-center ring-1 ring-black/5"
+                      style={{ backgroundColor: group.avatarBg, color: '#1f1f1f' }}
+                    >
+                      {group.avatarText}
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#188038] border-2 border-white"></span>
+                  </div>
+
+                  {/* 친구 정보 & 아코디언 토글 */}
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[14px] font-semibold text-[#1f1f1f] truncate">
+                          {group.partnerName}
+                        </span>
+                        {/* 아코디언 뱃지 */}
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors shrink-0 ${
+                            isExpanded 
+                              ? 'bg-[#1a73e8] text-white' 
+                              : 'bg-[#e8f0fe] text-[#1a73e8]'
+                          }`}
+                        >
+                          대화 {group.threads.length}개
+                          <span className="material-symbols-outlined text-[14px] leading-none">
+                            {isExpanded ? 'expand_less' : 'expand_more'}
+                          </span>
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#5f6368] shrink-0 font-mono">
+                        {formatTime(group.latestThread.updatedAt)}
+                      </span>
+                    </div>
+
+                    {/* 최신 메시지 미리보기 */}
+                    <p className="text-[13px] text-[#3c4043] truncate">
+                      <span className="text-[11px] font-semibold text-[#1a73e8] mr-1">[최근]</span>
+                      {group.latestThread.lastSender === 'user' ? (
+                        <span className="text-[#1a73e8] font-semibold">나: </span>
+                      ) : (
+                        <span className="font-semibold text-[#1f1f1f]">{group.partnerName}: </span>
+                      )}
+                      <span>{group.latestThread.lastMessage || '대화를 시작해보세요.'}</span>
+                    </p>
+                  </div>
+
+                  {/* 아코디언 펼침/접힘 화살표 */}
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#747775] group-hover:text-[#1a73e8] transition-colors">
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isExpanded ? 'expand_less' : 'expand_more'}
                     </span>
                   </div>
-                </div>
+                </article>
 
-                {/* 삭제 버튼 */}
-                {onDeleteThread && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`'${thread.partnerName}'님과의 대화방을 삭제하시겠습니까?`)) {
-                        onDeleteThread(thread.id);
-                      }
-                    }}
-                    className="absolute right-3 top-3 text-[#9aa0a6] hover:text-[#d93025] p-1.5 rounded-full hover:bg-black/5 transition-colors"
-                    title="대화방 삭제"
-                  >
-                    <span className="material-symbols-outlined text-[17px]">delete</span>
-                  </button>
+                {/* 아코디언 서브 리스트 (숨겨져 있다가 펼쳐짐) */}
+                {isExpanded && (
+                  <div className="bg-[#f8fafd] border-t border-[#e8eaed] px-4 py-2.5 space-y-2 animate-in slide-in-from-top-1 duration-150">
+                    <div className="flex items-center justify-between text-[11px] text-[#5f6368] font-medium px-1 pb-1 border-b border-[#e8eaed]">
+                      <span>'{group.partnerName}'님과의 대화 목록 ({group.threads.length})</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const matched = friends.find(f => f.name === group.partnerName) || {
+                            id: `friend-${Date.now()}`,
+                            name: group.partnerName,
+                            avatarBg: group.avatarBg,
+                            avatarText: group.avatarText,
+                            isAi: group.partnerName.includes('AI')
+                          };
+                          onStartChatWithFriend(matched, true);
+                        }}
+                        className="text-[#1a73e8] hover:underline font-bold flex items-center gap-0.5"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">add</span>
+                        새 대화
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {group.threads.map((thread, idx) => {
+                        const isSelected = thread.id === activeThreadId;
+                        return (
+                          <div
+                            key={thread.id}
+                            onClick={() => onSelectThread(thread)}
+                            className={`p-2.5 rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2.5 ${
+                              isSelected 
+                                ? 'bg-[#e8f0fe] border border-[#1a73e8]/40 shadow-xs' 
+                                : 'bg-white hover:bg-[#eef4ff] border border-[#dadce0]'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                                  idx === 0 
+                                    ? 'bg-[#e8f0fe] text-[#1a73e8]' 
+                                    : 'bg-[#f1f3f4] text-[#5f6368]'
+                                }`}>
+                                  {idx === 0 ? '최근 대화' : `#${group.threads.length - idx}`}
+                                </span>
+                                <span className="text-[11px] text-[#5f6368] font-mono shrink-0">
+                                  {formatTime(thread.updatedAt)}
+                                </span>
+                              </div>
+                              <p className="text-[13px] text-[#1f1f1f] truncate leading-snug">
+                                {thread.lastSender === 'user' ? (
+                                  <span className="text-[#1a73e8] font-medium">나: </span>
+                                ) : null}
+                                {thread.lastMessage || '대화를 시작해보세요.'}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="material-symbols-outlined text-[16px] text-[#1a73e8]">
+                                arrow_forward
+                              </span>
+                              {onDeleteThread && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`이 대화방을 삭제하시겠습니까?`)) {
+                                      onDeleteThread(thread.id);
+                                    }
+                                  }}
+                                  className="p-1 text-[#9aa0a6] hover:text-[#d93025] rounded-full hover:bg-black/5 transition-colors ml-1"
+                                  title="대화방 삭제"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </article>
+              </div>
             );
           })
         )}
