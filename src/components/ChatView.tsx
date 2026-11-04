@@ -26,6 +26,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // AI 빠른 답장 칩 상태 (사전 로드된 번역 포함)
   const [smartReplies, setSmartReplies] = useState<SmartReplyItem[]>(DEFAULT_SMART_REPLIES);
 
+  // Web Speech API 현재 재생 중인 메시지 ID
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
+  // 컴포넌트 언마운트 시 재생 중이던 음성 취소
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
@@ -185,6 +197,48 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
+  // Web Speech API를 활용한 영어 문장 음성 듣기 (TTS)
+  const handlePlaySpeech = (msgId: string, englishText: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      alert('현재 브라우저에서는 Web Speech API를 지원하지 않습니다.');
+      return;
+    }
+
+    // 1. 이미 동일 문장이 재생 중인 경우 중단 (토글 제어)
+    if (speakingMsgId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+
+    // 2. 이전 음성 취소 후 새로 발화
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(englishText);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.95; // 학습자에게 가장 적합한 명료한 발음 속도
+    utterance.pitch = 1.0;
+
+    // 브라우저에 설치된 자연스러운 영어 음성 우선 탐색
+    const voices = window.speechSynthesis.getVoices();
+    const naturalVoice = voices.find(v => v.lang.startsWith('en') && (
+      v.name.includes('Google') || 
+      v.name.includes('Natural') || 
+      v.name.includes('Samantha') || 
+      v.name.includes('Daniel')
+    )) || voices.find(v => v.lang.startsWith('en'));
+
+    if (naturalVoice) {
+      utterance.voice = naturalVoice;
+    }
+
+    utterance.onstart = () => setSpeakingMsgId(msgId);
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
   return (
     <div className="flex flex-col h-full flex-1 min-h-0 w-full relative overflow-hidden">
       {/* 1. 메시지 리스트 영역 (스마트 스크롤 & 키보드 빈공간 축소) */}
@@ -233,13 +287,31 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       : 'bg-white text-[#1f1f1f] border border-[#e0e3e7] rounded-tl-xs'
                   }`}
                 >
-                  {/* 문장 텍스트 및 문장 끝 초미니멀 '한' 인라인 토글 버튼 */}
+                  {/* 문장 텍스트 및 문장 끝 초미니멀 음성 듣기(TTS) & '한' 인라인 토글 버튼 */}
                   <p className="whitespace-pre-wrap select-text leading-relaxed">
                     <span>{msg.text}</span>
+
+                    {/* Speech API 음성 듣기 아이콘 */}
+                    <button
+                      type="button"
+                      onClick={() => handlePlaySpeech(msg.id, msg.text)}
+                      className={`inline-flex items-center ml-1.5 align-baseline transition-all active:scale-90 cursor-pointer select-none ${
+                        speakingMsgId === msg.id 
+                          ? (isUser ? 'text-white animate-pulse' : 'text-[#1a73e8] animate-pulse')
+                          : (isUser ? 'text-white/70 hover:text-white' : 'text-[#747775] hover:text-[#1a73e8]')
+                      }`}
+                      title={speakingMsgId === msg.id ? "음성 재생 중지" : "원어민 발음 듣기"}
+                    >
+                      <span className="material-symbols-outlined text-[15px] leading-none">
+                        volume_up
+                      </span>
+                    </button>
+
+                    {/* 한국어 해석 아코디언 토글 버튼 */}
                     <button
                       type="button"
                       onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
-                      className={`inline-flex items-center gap-0.5 ml-1.5 align-baseline transition-opacity active:scale-95 cursor-pointer select-none ${
+                      className={`inline-flex items-center gap-0.5 ml-1 align-baseline transition-opacity active:scale-95 cursor-pointer select-none ${
                         isUser 
                           ? 'text-white/70 hover:text-white' 
                           : 'text-[#747775] hover:text-[#1a73e8]'
@@ -277,13 +349,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           {translationData.keyExpressions.map((exp, i) => (
                             <span
                               key={i}
-                              className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              onClick={() => handlePlaySpeech(`ke-${i}-${msg.id}`, exp.phrase)}
+                              className={`text-[10px] px-1.5 py-0.5 rounded cursor-pointer inline-flex items-center gap-1 active:scale-95 transition-all ${
                                 isUser 
-                                  ? 'bg-white/15 text-white' 
-                                  : 'bg-[#f0f4f9] text-[#1a73e8]'
+                                  ? 'bg-white/15 text-white hover:bg-white/25' 
+                                  : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff]'
                               }`}
+                              title="핵심 표현 발음 듣기"
                             >
                               <strong className="font-semibold">{exp.phrase}</strong>: {exp.meaning}
+                              <span className="material-symbols-outlined text-[11px] opacity-70">
+                                {speakingMsgId === `ke-${i}-${msg.id}` ? 'volume_up' : 'volume_down'}
+                              </span>
                             </span>
                           ))}
                         </div>
