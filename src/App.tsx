@@ -296,9 +296,9 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#1f1f1f] flex flex-col font-sans">
+    <div className={`bg-[#faf8ff] text-[#1f1f1f] flex flex-col font-sans ${currentTab === 'chat' ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : 'min-h-screen'}`}>
       {/* PWA 모바일 프레임 컨테이너 */}
-      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col bg-[#faf8ff] shadow-2xl relative">
+      <div className={`w-full max-w-md mx-auto flex flex-col bg-[#faf8ff] shadow-2xl relative ${currentTab === 'chat' ? 'h-full max-h-full overflow-hidden' : 'min-h-screen'}`}>
         {/* 상단 헤더 */}
         <Header 
           currentTab={currentTab} 
@@ -308,7 +308,7 @@ const MainApp: React.FC = () => {
         />
 
         {/* 메인 뷰 컨텐츠 */}
-        <main className="flex-1 overflow-x-hidden">
+        <main className={`flex-1 min-h-0 ${currentTab === 'chat' ? 'overflow-hidden flex flex-col' : 'overflow-x-hidden'}`}>
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 text-[#5f6368]">
               <div className="w-8 h-8 border-3 border-[#1a73e8] border-t-transparent rounded-full animate-spin mb-3"></div>

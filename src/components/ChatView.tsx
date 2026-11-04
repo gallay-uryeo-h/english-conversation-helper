@@ -32,14 +32,58 @@ export const ChatView: React.FC<ChatViewProps> = ({
     "Actually, I'm a bit tied up right now."
   ]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
 
-  // 스크롤 맨 아래로 이동
+  // 스마트 스크롤 제어:
+  // - 대화가 적을 때는 상단 버블이 위로 사라지지 않고 빈 공간(empty space)만 축소
+  // - 대화가 컨테이너 높이를 넘칠 때만 마지막 버블이 입력창 바로 위에 붙도록 스크롤
+  const scrollToBottom = (smooth = true) => {
+    if (!scrollContainerRef.current) return;
+    const { scrollHeight, clientHeight } = scrollContainerRef.current;
+    if (scrollHeight > clientHeight) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollHeight - clientHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    } else {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  };
+
+  // 메시지, 추천 카드, 아코디언 변경 시 스크롤 동기화
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, recommendations, expandedMsgIds]);
+    scrollToBottom(true);
+  }, [messages.length, recommendations.length, expandedMsgIds]);
+
+  // 모바일 가상 키보드(visualViewport) 대응: 윈도우 스크롤 억제 및 채팅창 높이 맞춤
+  useEffect(() => {
+    const handleViewportChange = () => {
+      window.scrollTo(0, 0);
+      scrollToBottom(false);
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      window.visualViewport.addEventListener('scroll', handleViewportChange);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportChange);
+        window.visualViewport.removeEventListener('scroll', handleViewportChange);
+      }
+    };
+  }, []);
+
+  // 입력창 포커스 시 브라우저의 기본 페이지 스크롤 억제 및 대화 영역 보정
+  const handleInputFocus = () => {
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      scrollToBottom(true);
+    }, 120);
+  };
 
   // 대화 맥락이 바뀔 때 AI 스마트 답장 생성
   useEffect(() => {
@@ -147,9 +191,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] w-full relative">
-      {/* 1. 메시지 리스트 영역 */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3.5">
+    <div className="flex flex-col h-full flex-1 min-h-0 w-full relative overflow-hidden">
+      {/* 1. 메시지 리스트 영역 (스마트 스크롤 & 키보드 빈공간 축소) */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain"
+      >
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
           const isExpanded = Boolean(expandedMsgIds[msg.id]);
@@ -250,11 +297,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           );
         })}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* 2. AI 스마트 빠른 답장 칩 목록 */}
-      <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
         <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
           <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
           빠른 답장:
@@ -272,7 +318,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* 3. 디바운스 로딩 인디케이터 */}
       {isDebouncing && (
-        <div className="mx-3 mb-1 px-3 py-1 bg-[#e8f0fe] text-[#1a73e8] text-[11px] rounded-lg flex items-center gap-1.5 animate-pulse">
+        <div className="mx-3 mb-1 px-3 py-1 bg-[#e8f0fe] text-[#1a73e8] text-[11px] rounded-lg flex items-center gap-1.5 animate-pulse shrink-0">
           <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
           <span>Gemini 3.5 영작 추천 생성 중...</span>
         </div>
@@ -280,7 +326,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* 4. 실시간 한글 입력 영작 추천 카드 (심플 & 미니멀) */}
       {recommendations.length > 0 && (
-        <div className="mx-3 mb-2 p-1.5 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150">
+        <div className="mx-3 mb-2 p-1.5 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150 shrink-0">
           {recommendations.map((rec) => (
             <div
               key={rec.id}
@@ -308,8 +354,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* 5. 하단 입력 바 */}
-      <div className="p-3 bg-[#f0f4f9] border-t border-[#e0e3e7] flex items-center gap-2">
+      {/* 5. 하단 입력 바 (안전영역 대응 및 키보드 밀림 방지) */}
+      <div className="p-3 bg-[#f0f4f9] border-t border-[#e0e3e7] flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           onClick={() => setIsRecording(!isRecording)}
           className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 ${
@@ -329,6 +375,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           placeholder="한글 초안이나 영어 메시지를 입력하세요..."
           value={inputText}
           onChange={handleInputChange}
+          onFocus={handleInputFocus}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               handleSend();
