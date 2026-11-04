@@ -7,7 +7,6 @@ import { BottomNav } from './components/BottomNav';
 import { FriendsView } from './components/FriendsView';
 import { ThreadsView } from './components/ThreadsView';
 import { ChatView } from './components/ChatView';
-import { AnalysisView } from './components/AnalysisView';
 import { ArchiveView } from './components/ArchiveView';
 import { LoginView } from './components/LoginView';
 import { AdminModal } from './components/AdminModal';
@@ -24,7 +23,6 @@ const MainApp: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [expressions, setExpressions] = useState<SavedExpression[]>([]);
   const [scripts, setScripts] = useState<SavedScript[]>([]);
-  const [selectedMessageForAnalysis, setSelectedMessageForAnalysis] = useState<Message | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -218,18 +216,19 @@ const MainApp: React.FC = () => {
   const handleSendMessage = async (
     text: string, 
     koreanDraft?: string, 
-    recommendations?: RecommendationCard[]
+    recommendations?: RecommendationCard[],
+    precomputedTranslation?: MessageTranslation
   ) => {
     if (!activeThread) return;
 
     // 1. 유저 메시지 화면에 0ms 즉시 추가
     const matchedRec = recommendations?.find(r => r.english === text);
-    const initialTranslation: MessageTranslation | undefined = (koreanDraft || matchedRec) ? {
+    const initialTranslation: MessageTranslation | undefined = precomputedTranslation || (koreanDraft || matchedRec ? {
       translation: koreanDraft || matchedRec?.koreanMeaning || text,
       keyExpressions: matchedRec?.grammarTip 
         ? [{ phrase: matchedRec.english.split(' ').slice(0, 3).join(' '), meaning: matchedRec.grammarTip }]
         : []
-    } : undefined;
+    } : undefined);
 
     const userMsgId = `msg-${Date.now()}`;
     const userMsg: Message = {
@@ -243,27 +242,9 @@ const MainApp: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setSelectedMessageForAnalysis(userMsg);
     storageService.saveMessage(activeThread.id, userMsg);
 
-    // 2. 비동기 백그라운드 문법/표현 심화 분석 (UI 블로킹 없음)
-    aiService.analyzeMessageAsync(text, koreanDraft).then(async (analysis) => {
-      if (analysis) {
-        setMessages((prev) => prev.map(m => {
-          if (m.id === userMsgId) {
-            const updatedTranslation = m.translation || (analysis.translation ? {
-              translation: analysis.translation,
-              keyExpressions: analysis.keyVocabulary.map(v => ({ phrase: v.word, meaning: v.meaning }))
-            } : undefined);
-            return { ...m, analysis, translation: updatedTranslation };
-          }
-          return m;
-        }));
-        await storageService.saveMessage(activeThread.id, { ...userMsg, analysis });
-      }
-    }).catch(e => console.warn("Background analysis error:", e));
-
-    // 3. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
+    // 2. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
     try {
       const replyData = await aiService.generateAssistantReplyAsync(
         activeThread.partnerName, 
@@ -347,22 +328,10 @@ const MainApp: React.FC = () => {
                   activeThread={activeThread}
                   messages={messages}
                   onSendMessage={handleSendMessage}
-                  onSelectMessageForAnalysis={(msg) => {
-                    setSelectedMessageForAnalysis(msg);
-                    setCurrentTab('analysis');
-                  }}
                 />
               )}
 
-              {/* 4. 언어 인스펙터 분석 뷰 */}
-              {currentTab === 'analysis' && (
-                <AnalysisView 
-                  selectedMessage={selectedMessageForAnalysis}
-                  onSaveToArchive={handleSaveToArchive}
-                />
-              )}
-
-              {/* 5. 표현 및 대본 보관함 뷰 */}
+              {/* 4. 표현 및 대본 보관함 뷰 */}
               {currentTab === 'archive' && (
                 <ArchiveView 
                   expressions={expressions}

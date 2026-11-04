@@ -142,7 +142,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
               <span className="material-symbols-outlined text-[48px] text-[#bfc6dd]">menu_book</span>
               <p className="text-[14px] font-medium text-[#1f1f1f]">보관된 대본이 없습니다.</p>
               <p className="text-[12px] text-[#747775]">
-                언어 인스펙터 분석에서 생성된 롤플레잉 대본이 여기에 저장됩니다.
+                저장된 대본이 여기에 보관됩니다.
               </p>
             </div>
           ) : (

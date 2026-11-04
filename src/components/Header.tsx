@@ -232,12 +232,6 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="truncate">{activeThread?.partnerName || '대화'}</span>
                 </>
               )}
-              {currentTab === 'analysis' && (
-                <>
-                  <span className="material-symbols-outlined text-[#00897b] text-[20px]">insights</span>
-                  언어 인스펙터
-                </>
-              )}
               {currentTab === 'archive' && (
                 <>
                   <span className="material-symbols-outlined text-[#795900] text-[20px]">bookmark</span>

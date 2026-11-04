@@ -10,6 +10,41 @@ export interface AssistantReplyData {
   translation: MessageTranslation;
 }
 
+export interface SmartReplyItem {
+  reply: string;
+  translation: MessageTranslation;
+}
+
+// 기본 스마트 빠른 답장 목록 (사전 번역 탑재)
+export const DEFAULT_SMART_REPLIES: SmartReplyItem[] = [
+  {
+    reply: "Sounds great, what time works?",
+    translation: {
+      translation: "좋아요, 몇 시가 괜찮으세요?",
+      keyExpressions: [{ phrase: "what time works", meaning: "몇 시가 편한가요" }]
+    }
+  },
+  {
+    reply: "I'd love to! Tell me more.",
+    translation: {
+      translation: "저도 정말 그러고 싶어요! 더 자세히 이야기해 주세요.",
+      keyExpressions: [{ phrase: "I'd love to", meaning: "정말 그러고 싶다" }]
+    }
+  },
+  {
+    reply: "Actually, I'm a bit tied up right now.",
+    translation: {
+      translation: "사실은, 지금 제가 일이 좀 밀려서 바빠요.",
+      keyExpressions: [{ phrase: "tied up", meaning: "바쁜, 꼼짝 못 하는" }]
+    }
+  }
+];
+
+// 메모리 캐시 초기값 세팅
+DEFAULT_SMART_REPLIES.forEach(item => {
+  translationCache.set(item.reply, item.translation);
+});
+
 // 추천 카드 정렬 기준 (Polite -> Natural -> Casual)
 export const TONE_ORDER: Record<string, number> = {
   'Polite': 1,
@@ -727,35 +762,40 @@ Respond ONLY with valid JSON:
     return fallback;
   },
 
-  // 대화 흐름 기반 빠른 답장(Smart Replies) AI 실시간 생성
-  async generateSmartRepliesAsync(messages: Message[], partnerName: string): Promise<string[]> {
-    const defaultReplies = [
-      "Sounds great, what time works?",
-      "I'd love to! Tell me more.",
-      "Actually, I'm a bit tied up right now."
-    ];
-
-    if (!messages || messages.length === 0) return defaultReplies;
+  // 대화 흐름 기반 빠른 답장(Smart Replies) 및 한국어 해석/핵심표현 동시 일괄 생성
+  async generateSmartRepliesAsync(messages: Message[], partnerName: string): Promise<SmartReplyItem[]> {
+    if (!messages || messages.length === 0) return DEFAULT_SMART_REPLIES;
 
     const recent = messages.slice(-4);
     const lastMsg = recent[recent.length - 1];
     const cacheKey = `${partnerName}_${lastMsg.text}`;
     if (smartRepliesCache.has(cacheKey)) {
-      return smartRepliesCache.get(cacheKey)!;
+      const cachedList = smartRepliesCache.get(cacheKey)!;
+      // translationCache에서 완전한 SmartReplyItem 복원
+      return cachedList.map(text => ({
+        reply: text,
+        translation: translationCache.get(text) || { translation: text, keyExpressions: [] }
+      }));
     }
 
     const contextText = recent.map(m => `${m.sender === 'user' ? 'Me' : partnerName}: "${m.text}"`).join('\n');
     const prompt = `Based on this recent English conversation:
 ${contextText}
 
-Generate 3 natural, conversational, short reply suggestions for 'Me' to reply to '${partnerName}' (3 to 7 words each):
-1. Positive / enthusiastic agreement
-2. Friendly follow-up / inquiry
-3. Light alternative or polite decline
+Generate 3 natural, conversational, short reply suggestions for 'Me' to reply to '${partnerName}' (3 to 7 words each).
+For EACH reply, provide its natural Korean translation and 1 key expression/idiom.
 
 Respond ONLY with valid JSON:
 {
-  "replies": ["option 1", "option 2", "option 3"]
+  "replies": [
+    {
+      "reply": "English reply (3-7 words)",
+      "translation": "자연스러운 한국어 해석",
+      "keyExpressions": [
+        { "phrase": "key idiom or word", "meaning": "한국어 의미" }
+      ]
+    }
+  ]
 }`;
 
     // 1. Gemini
@@ -777,8 +817,21 @@ Respond ONLY with valid JSON:
           if (text) {
             const parsed = JSON.parse(text);
             if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
-              const list = parsed.replies.slice(0, 3);
-              smartRepliesCache.set(cacheKey, list);
+              const list: SmartReplyItem[] = parsed.replies.slice(0, 3).map((item: any) => {
+                const reply = typeof item === 'string' ? item : item.reply;
+                const translation: MessageTranslation = typeof item === 'object' && item.translation ? {
+                  translation: item.translation,
+                  keyExpressions: Array.isArray(item.keyExpressions) ? item.keyExpressions : []
+                } : {
+                  translation: reply,
+                  keyExpressions: []
+                };
+                // 번역 공용 캐시에 즉시 저장
+                translationCache.set(reply, translation);
+                return { reply, translation };
+              });
+
+              smartRepliesCache.set(cacheKey, list.map(item => item.reply));
               return list;
             }
           }
@@ -797,19 +850,31 @@ Respond ONLY with valid JSON:
           const chat = await groq.chat.completions.create({
             model: GROQ_DEFAULT_MODEL,
             messages: [
-              { role: "system", content: "You generate quick conversational smart reply chips. Output JSON." },
+              { role: "system", content: "You generate quick conversational smart reply chips with Korean translations. Output JSON." },
               { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" },
             temperature: 0.6,
-            max_tokens: 150
+            max_tokens: 300
           });
           const content = chat.choices[0]?.message?.content;
           if (content) {
             const parsed = JSON.parse(content);
             if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
-              const list = parsed.replies.slice(0, 3);
-              smartRepliesCache.set(cacheKey, list);
+              const list: SmartReplyItem[] = parsed.replies.slice(0, 3).map((item: any) => {
+                const reply = typeof item === 'string' ? item : item.reply;
+                const translation: MessageTranslation = typeof item === 'object' && item.translation ? {
+                  translation: item.translation,
+                  keyExpressions: Array.isArray(item.keyExpressions) ? item.keyExpressions : []
+                } : {
+                  translation: reply,
+                  keyExpressions: []
+                };
+                translationCache.set(reply, translation);
+                return { reply, translation };
+              });
+
+              smartRepliesCache.set(cacheKey, list.map(item => item.reply));
               return list;
             }
           }
@@ -819,6 +884,6 @@ Respond ONLY with valid JSON:
       }
     }
 
-    return defaultReplies;
+    return DEFAULT_SMART_REPLIES;
   }
 };

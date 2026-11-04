@@ -1,19 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Thread, Message, RecommendationCard, MessageTranslation } from '../types';
-import { aiService } from '../services/aiService';
+import { aiService, SmartReplyItem, DEFAULT_SMART_REPLIES } from '../services/aiService';
 
 interface ChatViewProps {
   activeThread: Thread;
   messages: Message[];
-  onSendMessage: (text: string, koreanDraft?: string, recommendations?: RecommendationCard[]) => void;
-  onSelectMessageForAnalysis: (message: Message) => void;
+  onSendMessage: (text: string, koreanDraft?: string, recommendations?: RecommendationCard[], precomputedTranslation?: MessageTranslation) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
   activeThread,
   messages,
-  onSendMessage,
-  onSelectMessageForAnalysis
+  onSendMessage
 }) => {
   const [inputText, setInputText] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
@@ -25,12 +23,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 레거시 메시지 등 translation이 누락된 경우에만 보조 캐시
   const [fallbackTranslations, setFallbackTranslations] = useState<Record<string, MessageTranslation>>({});
 
-  // AI 빠른 답장 칩 상태
-  const [smartReplies, setSmartReplies] = useState<string[]>([
-    "Sounds great, what time works?",
-    "I'd love to! Tell me more.",
-    "Actually, I'm a bit tied up right now."
-  ]);
+  // AI 빠른 답장 칩 상태 (사전 로드된 번역 포함)
+  const [smartReplies, setSmartReplies] = useState<SmartReplyItem[]>(DEFAULT_SMART_REPLIES);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
@@ -144,8 +138,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 400);
   };
 
-  // 텍스트 직접 전송 (0ms 즉시 전송)
-  const handleSend = (textToSend?: string, koreanDraft?: string) => {
+  // 텍스트 직접 전송 (0ms 즉시 전송, 사전 번역 탑재)
+  const handleSend = (textToSend?: string, koreanDraft?: string, precomputedTranslation?: MessageTranslation) => {
     const finalMsg = textToSend || inputText;
     if (!finalMsg.trim()) return;
 
@@ -156,7 +150,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
     onSendMessage(
       finalMsg.trim(), 
       koreanDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
-      recommendations
+      recommendations,
+      precomputedTranslation
     );
     setInputText('');
     setRecommendations([]);
@@ -283,35 +278,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   )}
                 </div>
               </div>
-
-              {/* 유저 메시지 심화 피드백 버튼 (말풍선 외부 우하단 배치로 공간 절약) */}
-              {isUser && msg.analysis && (
-                <button
-                  onClick={() => onSelectMessageForAnalysis(msg)}
-                  className="inline-flex items-center gap-0.5 mt-1 mr-1 text-[11px] text-[#00897b] font-medium hover:underline opacity-90 self-end"
-                >
-                  <span className="material-symbols-outlined text-[13px]">insights</span>
-                  피드백 ({msg.analysis.grammarScore}점)
-                </button>
-              )}
             </div>
           );
         })}
       </div>
 
-      {/* 2. AI 스마트 빠른 답장 칩 목록 */}
+      {/* 2. AI 스마트 빠른 답장 칩 목록 (사전 번역 탑재) */}
       <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
         <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
           <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
           빠른 답장:
         </span>
-        {smartReplies.map((reply, idx) => (
+        {smartReplies.map((item, idx) => (
           <button
             key={idx}
-            onClick={() => handleSend(reply)}
+            onClick={() => handleSend(item.reply, undefined, item.translation)}
             className="px-3 py-1 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0"
           >
-            {reply}
+            {item.reply}
           </button>
         ))}
       </div>

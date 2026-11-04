@@ -23,12 +23,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
       badge: unreadCount
     },
     {
-      id: 'analysis' as MainTab,
-      label: '언어 분석',
-      icon: 'insights',
-      fill: currentTab === 'analysis'
-    },
-    {
       id: 'archive' as MainTab,
       label: '표현 보관함',
       icon: 'bookmark',
@@ -38,7 +32,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, u
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#f0f4f9] border-t border-[#e0e3e7] pb-[env(safe-area-inset-bottom,0px)] shadow-lg max-w-md mx-auto">
-      <div className="h-16 px-2 grid grid-cols-4 items-center">
+      <div className="h-16 px-4 grid grid-cols-3 items-center">
         {tabs.map((tab) => {
           const isActive = tab.fill;
           return (

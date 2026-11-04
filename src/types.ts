@@ -95,4 +95,4 @@ export interface GroupMember {
   isAi?: boolean;
 }
 
-export type MainTab = 'friends' | 'threads' | 'chat' | 'analysis' | 'archive';
+export type MainTab = 'friends' | 'threads' | 'chat' | 'archive';
