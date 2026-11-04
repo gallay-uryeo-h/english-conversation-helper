@@ -288,45 +288,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* 4. 실시간 한글 입력 AI 영작 변환 추천 카드 (순서: Polite -> Natural -> Casual) */}
+      {/* 4. 실시간 한글 입력 영작 추천 카드 (심플 & 미니멀) */}
       {recommendations.length > 0 && (
-        <div className="mx-3 mb-2 p-2.5 bg-white border border-[#c2e7ff] rounded-2xl shadow-lg animate-in slide-in-from-bottom-2 duration-200">
-          <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#e0e3e7]">
-            <span className="text-[12px] font-bold text-[#1a73e8] flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px]">stars</span>
-              AI 영작 추천 (Polite · Natural · Casual)
-            </span>
-            <span className="text-[11px] text-[#5f6368]">클릭 시 즉시 전송</span>
-          </div>
-
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {recommendations.map((rec) => (
-              <div
-                key={rec.id}
-                onClick={() => handleSelectRecommendation(rec)}
-                className="p-2.5 bg-[#f8fafd] hover:bg-[#eef4ff] active:bg-[#e2edff] border border-[#dadce0] rounded-xl cursor-pointer transition-all text-left"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    rec.tone === 'Polite' ? 'bg-[#e8f0fe] text-[#1a73e8] border border-[#c2e7ff]' :
-                    rec.tone === 'Natural' ? 'bg-[#e6f4ea] text-[#137333] border border-[#ceead6]' :
-                    'bg-[#feefe3] text-[#b06000] border border-[#fedfc8]'
-                  }`}>
-                    {rec.tone === 'Polite' ? '공손함 (Polite)' :
-                     rec.tone === 'Natural' ? '자연스러움 (Natural)' :
-                     '친근함 (Casual)'}
-                  </span>
-                  <span className="text-[11px] text-[#5f6368]">{rec.koreanMeaning}</span>
-                </div>
-                <p className="text-[13px] font-semibold text-[#1f1f1f]">{rec.english}</p>
-                {rec.grammarTip && (
-                  <p className="text-[11px] text-[#5f6368] mt-1 italic">
-                    💡 {rec.grammarTip}
-                  </p>
-                )}
+        <div className="mx-3 mb-2 p-1.5 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150">
+          {recommendations.map((rec) => (
+            <div
+              key={rec.id}
+              onClick={() => handleSelectRecommendation(rec)}
+              className="px-3 py-2 bg-[#f8fafd] hover:bg-[#eef4ff] active:bg-[#e2edff] rounded-xl cursor-pointer transition-colors flex items-center justify-between gap-2.5 text-left group"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                  rec.tone === 'Polite' ? 'bg-[#e8f0fe] text-[#1a73e8]' :
+                  rec.tone === 'Natural' ? 'bg-[#e6f4ea] text-[#137333]' :
+                  'bg-[#feefe3] text-[#b06000]'
+                }`}>
+                  {rec.tone}
+                </span>
+                <p className="text-[13px] text-[#1f1f1f] font-medium leading-snug group-hover:text-[#1a73e8] transition-colors">
+                  {rec.english}
+                </p>
               </div>
-            ))}
-          </div>
+
+              <span className="material-symbols-outlined text-[16px] text-[#9aa0a6] group-hover:text-[#1a73e8] shrink-0">
+                arrow_upward
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
