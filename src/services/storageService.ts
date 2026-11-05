@@ -6,7 +6,7 @@ import {
   setDoc,
   User
 } from '../firebase';
-import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember, ConversationExpressionItem } from '../types';
+import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember, VocabularyCorpusItem, VocabularyContext } from '../types';
 
 // 기본 제공 AI 영어 회화 친구
 export const DEFAULT_AI_FRIEND: Friend = {
@@ -399,37 +399,108 @@ export const storageService = {
     }
   },
 
-  // 모든 대화방에서 자동으로 쌓인 유용한 표현 및 해석 목록 가져오기
-  async getAllConversationExpressions(): Promise<ConversationExpressionItem[]> {
+  // 모든 대화방에서 단어/표현 중심으로 집계하고 용례 문장들을 연결하는 메서드 (스마트 오버랩 병합 탑재)
+  async getAllVocabularyItems(): Promise<VocabularyCorpusItem[]> {
     const threads = await this.getThreads();
-    const expressionsList: ConversationExpressionItem[] = [];
+    const vocabMap = new Map<string, {
+      phrase: string;
+      meaning: string;
+      lastUsedAt: number;
+      contexts: VocabularyContext[];
+    }>();
+
+    // 단어 정규화 헬퍼 (소문자, 앞뒤 공백 및 특수문자 제거, 끝의 be동사/대명사 등 단순 수식어 정리)
+    const normalizeKey = (raw: string) => {
+      return raw.toLowerCase().trim()
+        .replace(/^to\s+/, '') // 'to appreciate' -> 'appreciate'
+        .replace(/^(a|an|the)\s+/, '')
+        .replace(/[.,!?~]+$/, '');
+    };
 
     for (const thread of threads) {
       const messages = await this.getMessages(thread.id);
       for (const msg of messages) {
-        // 한글 해석이 있거나 핵심 표현이 있는 문장 필터링
-        const hasTranslation = Boolean(msg.translation?.translation && msg.translation.translation.trim().length > 0);
-        const hasKeyExpressions = Boolean(msg.translation?.keyExpressions && msg.translation.keyExpressions.length > 0);
+        if (!msg.text) continue;
+        const expressions = msg.translation?.keyExpressions || [];
+        const koreanTrans = msg.translation?.translation || '';
 
-        if (hasTranslation || hasKeyExpressions) {
-          expressionsList.push({
-            id: `conv-exp-${msg.id}`,
+        for (const exp of expressions) {
+          if (!exp.phrase || !exp.phrase.trim()) continue;
+          const cleanPhrase = exp.phrase.trim();
+          const key = normalizeKey(cleanPhrase);
+          if (!key) continue;
+
+          // [스마트 오버랩 병합]:
+          // 이미 등록된 단어 중 key를 포함하거나(예: 기존에 'cozy'가 있고 새 단어가 'cozy inside'인 경우)
+          // 또는 새 단어가 기존의 더 긴 단어의 핵심어인 경우 기본 핵심어 키로 통합
+          let matchedKey = key;
+          for (const existingKey of vocabMap.keys()) {
+            const regex1 = new RegExp(`\\b${existingKey}\\b`, 'i');
+            const regex2 = new RegExp(`\\b${key}\\b`, 'i');
+            
+            // 기존 키가 더 짧고 새 키에 포함되어 있으면 기존 키로 흡수 (예: 기존 cozy, 새 키 cozy inside -> cozy로 흡수)
+            if (existingKey.length <= key.length && regex1.test(key)) {
+              matchedKey = existingKey;
+              break;
+            }
+            // 새 키가 더 짧고 기존 키에 포함되어 있으면 더 짧은 핵심어로 교체
+            else if (key.length < existingKey.length && regex2.test(existingKey)) {
+              const oldData = vocabMap.get(existingKey)!;
+              vocabMap.delete(existingKey);
+              vocabMap.set(key, oldData);
+              matchedKey = key;
+              break;
+            }
+          }
+
+          const contextItem: VocabularyContext = {
+            msgId: msg.id,
             threadId: thread.id,
             partnerName: thread.partnerName,
             avatarBg: thread.avatarBg,
             avatarText: thread.avatarText,
-            english: msg.text,
-            korean: msg.translation?.translation || msg.koreanDraft || '',
-            keyExpressions: msg.translation?.keyExpressions || [],
+            englishSentence: msg.text,
+            koreanTranslation: koreanTrans,
             timestamp: msg.timestamp,
             sender: msg.sender
-          });
+          };
+
+          if (vocabMap.has(matchedKey)) {
+            const existing = vocabMap.get(matchedKey)!;
+            // 동일 문장이 중복 추가되지 않도록 방지
+            if (!existing.contexts.some(c => c.msgId === msg.id)) {
+              existing.contexts.push(contextItem);
+            }
+            if (msg.timestamp > existing.lastUsedAt) {
+              existing.lastUsedAt = msg.timestamp;
+            }
+          } else {
+            vocabMap.set(matchedKey, {
+              phrase: cleanPhrase,
+              meaning: exp.meaning || '',
+              lastUsedAt: msg.timestamp,
+              contexts: [contextItem]
+            });
+          }
         }
       }
     }
 
-    // 최신 시간순 내림차순 정렬
-    return expressionsList.sort((a, b) => b.timestamp - a.timestamp);
+    // 결과 배열 생성 (최근 사용순 정렬)
+    const result: VocabularyCorpusItem[] = [];
+    vocabMap.forEach((val, id) => {
+      val.contexts.sort((a, b) => b.timestamp - a.timestamp);
+      result.push({
+        id,
+        phrase: val.phrase,
+        meaning: val.meaning,
+        usageCount: val.contexts.length,
+        lastUsedAt: val.lastUsedAt,
+        contexts: val.contexts
+      });
+    });
+
+    return result.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   },
 
   // 보관된 표현 목록 가져오기

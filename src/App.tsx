@@ -211,23 +211,14 @@ const MainApp: React.FC = () => {
     const currentPartnerName = activeThread.partnerName;
 
     // 1. 유저 메시지 화면에 0ms 즉시 추가
-    const matchedRec = recommendations?.find(r => r.english === text);
-    const initialTranslation: MessageTranslation | undefined = precomputedTranslation || (koreanDraft || matchedRec ? {
-      translation: koreanDraft || matchedRec?.koreanMeaning || text,
-      keyExpressions: matchedRec?.grammarTip 
-        ? [{ phrase: matchedRec.english.split(' ').slice(0, 3).join(' '), meaning: matchedRec.grammarTip }]
-        : []
-    } : undefined);
-
     const userMsgId = `msg-${Date.now()}`;
     const userMsg: Message = {
       id: userMsgId,
       sender: 'user',
       text,
-      koreanDraft,
       timestamp: Date.now(),
       recommendations,
-      translation: initialTranslation
+      translation: precomputedTranslation
     };
 
     // UI state 즉시 반영
@@ -244,6 +235,17 @@ const MainApp: React.FC = () => {
 
     // 로컬스토리지 0ms 즉각 저장 (사용자가 즉시 방을 나가도 절대 유실되지 않음)
     await storageService.saveMessage(currentThreadId, userMsg);
+
+    // 내 발화도 AI 발화와 동일하게 정식 한국어 해석과 핵심 어휘만 깔끔하게 비동기 생성 및 보존
+    if (!precomputedTranslation) {
+      aiService.translateMessageAsync(text).then((transData) => {
+        if (transData && (transData.translation || transData.keyExpressions.length > 0)) {
+          userMsg.translation = transData;
+          storageService.saveMessage(currentThreadId, userMsg);
+          setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, translation: transData } : m));
+        }
+      }).catch(e => console.warn("User message translation error:", e));
+    }
 
     // 2. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
     try {

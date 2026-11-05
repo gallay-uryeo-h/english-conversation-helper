@@ -58,17 +58,25 @@ export interface SavedExpression {
   partnerName?: string;
 }
 
-export interface ConversationExpressionItem {
-  id: string;
+export interface VocabularyContext {
+  msgId: string;
   threadId: string;
   partnerName: string;
   avatarBg: string;
   avatarText: string;
-  english: string;
-  korean: string;
-  keyExpressions?: Array<{ phrase: string; meaning: string }>;
+  englishSentence: string;
+  koreanTranslation: string;
   timestamp: number;
   sender: 'user' | 'assistant';
+}
+
+export interface VocabularyCorpusItem {
+  id: string;
+  phrase: string;
+  meaning: string;
+  usageCount: number;
+  lastUsedAt: number;
+  contexts: VocabularyContext[];
 }
 
 export interface ScriptDialogueLine {

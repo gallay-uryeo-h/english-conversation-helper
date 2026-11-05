@@ -399,7 +399,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </button>
                   </p>
 
-                  {/* 미니멀 한국어 해석 & 핵심표현 & 한글 초안 아코디언 본체 (열림/닫힘 양방향 부드러운 CSS Grid 애니메이션) */}
+                  {/* 미니멀 한국어 해석 & 핵심 표현 아코디언 본체 (사용자/AI 동일한 정갈한 서식) */}
                   <div className={`grid transition-all duration-200 ease-in-out ${
                     isExpanded 
                       ? 'grid-rows-[1fr] opacity-100 mt-2' 
@@ -409,28 +409,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <div className={`pt-2 border-t text-left space-y-1.5 text-[12px] ${
                         isUser ? 'border-white/20 text-white/95' : 'border-[#e0e3e7] text-[#1f1f1f]'
                       }`}>
-                        {/* 한글 초안이 있는 경우 아코디언 내부에 표시 */}
-                        {msg.koreanDraft ? (
-                          <div className="space-y-1">
-                            <div className="flex items-start gap-1">
-                              <span className="font-semibold shrink-0 opacity-80">한글 초안:</span>
-                              <span className="leading-snug">{msg.koreanDraft}</span>
-                            </div>
-                            {translationData?.translation && translationData.translation !== msg.koreanDraft && (
-                              <div className="flex items-start gap-1 pt-0.5">
-                                <span className="font-semibold shrink-0 opacity-80">해석:</span>
-                                <span className="leading-snug">{translationData.translation}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          /* 한국어 번역 */
-                          <p className="leading-snug">
-                            {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
-                          </p>
-                        )}
+                        {/* 정식 한국어 해석 */}
+                        <p className="leading-snug">
+                          {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
+                        </p>
 
-                        {/* 핵심 표현 및 숙어 */}
+                        {/* 핵심 어휘 및 관용구 */}
                         {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-0.5">
                             {translationData.keyExpressions.map((exp, i) => (

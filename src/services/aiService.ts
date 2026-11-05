@@ -503,14 +503,19 @@ Respond ONLY with valid JSON.`;
     const prompt = `You are ${partnerName}, a close friend having an English conversation with the user.
 The user said to you in English: "${userText}"
 
-Generate a natural conversational response in English (1 to 2 sentences with a warm follow-up question), AND provide its natural Korean translation and 1 to 2 key expressions.
+Generate a natural conversational response in English (1 to 2 sentences with a warm follow-up question), AND provide its natural Korean translation and 1 to 2 key vocabulary/idiom expressions.
+
+Vocabulary Extraction Rules:
+- Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
+- DO NOT extract arbitrary word combinations (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate").
+- Real phrasal verbs/idioms are allowed (e.g. "catch up", "reach out to", "run out of").
 
 Respond ONLY with valid JSON:
 {
   "reply": "English spoken response (1-2 sentences)",
   "translation": "자연스러운 한국어 해석",
   "keyExpressions": [
-    { "phrase": "key idiom or word in English", "meaning": "한국어 의미" }
+    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "한국어 의미" }
   ]
 }`;
 
@@ -686,14 +691,19 @@ Respond ONLY with valid JSON:
       return translationCache.get(trimmed)!;
     }
 
-    const prompt = `Translate this conversational English message into natural Korean, and identify 1 to 3 key expressions/idioms with their meanings:
+    const prompt = `Translate this conversational English sentence into natural Korean, and identify 1 to 2 key vocabulary words or idioms with their Korean meanings:
 "${trimmed}"
+
+Vocabulary Extraction Rules:
+- Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
+- DO NOT extract arbitrary phrase fragments (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate").
+- Real phrasal verbs/idioms are allowed (e.g. "catch up", "reach out to", "on the same page").
 
 Respond ONLY with valid JSON:
 {
   "translation": "자연스러운 한국어 해석 1~2문장",
   "keyExpressions": [
-    { "phrase": "key idiom or word in English", "meaning": "한국어 의미" }
+    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "한국어 의미" }
   ]
 }`;
 

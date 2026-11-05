@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SavedExpression, SavedScript, ConversationExpressionItem } from '../types';
+import { SavedExpression, SavedScript, VocabularyCorpusItem, VocabularyContext } from '../types';
 import { storageService } from '../services/storageService';
 
 interface ArchiveViewProps {
@@ -15,13 +15,16 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   onAddExpression,
   onDeleteExpression
 }) => {
-  const [subTab, setSubTab] = useState<'conversations' | 'favorites' | 'scripts'>('conversations');
-  const [conversationExpressions, setConversationExpressions] = useState<ConversationExpressionItem[]>([]);
-  const [loadingConv, setLoadingConv] = useState(false);
+  const [subTab, setSubTab] = useState<'vocabulary' | 'favorites' | 'scripts'>('vocabulary');
+  const [vocabularyItems, setVocabularyItems] = useState<VocabularyCorpusItem[]>([]);
+  const [loading, setLoading] = useState(false);
   
-  // 검색 및 필터
+  // 검색 및 정렬
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPartner, setSelectedPartner] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'latest' | 'count' | 'alpha'>('latest');
+
+  // 대화 예문 아코디언이 열려있는 단어 ID들
+  const [expandedWordIds, setExpandedWordIds] = useState<Record<string, boolean>>({});
 
   // 직접 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
@@ -35,28 +38,34 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
   // 복사 알림 토스트 상태
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // 대화 목록에서 자동 수집된 표현 로드
+  // 대화 목록에서 단어 중심 코퍼스 로드
   useEffect(() => {
     let isCancelled = false;
-    const loadConversationExpressions = async () => {
-      setLoadingConv(true);
+    const loadVocabulary = async () => {
+      setLoading(true);
       try {
-        const items = await storageService.getAllConversationExpressions();
+        const items = await storageService.getAllVocabularyItems();
         if (!isCancelled) {
-          setConversationExpressions(items);
+          setVocabularyItems(items);
+          // 기본적으로 첫 2개 단어는 대화 예문을 열어둠
+          const initialExpanded: Record<string, boolean> = {};
+          items.slice(0, 2).forEach(it => {
+            initialExpanded[it.id] = true;
+          });
+          setExpandedWordIds(initialExpanded);
         }
       } catch (e) {
-        console.warn("Failed to load conversation expressions:", e);
+        console.warn("Failed to load vocabulary items:", e);
       } finally {
-        if (!isCancelled) setLoadingConv(false);
+        if (!isCancelled) setLoading(false);
       }
     };
 
-    loadConversationExpressions();
+    loadVocabulary();
     return () => { isCancelled = true; };
   }, []);
 
-  // Web Speech API 원어민 발음 재생
+  // Web Speech API 발음 듣기
   const handlePlaySpeech = (id: string, text: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
@@ -92,26 +101,31 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
+  // 대화보기 아코디언 토글
+  const handleToggleExpand = (wordId: string) => {
+    setExpandedWordIds(prev => ({
+      ...prev,
+      [wordId]: !prev[wordId]
+    }));
+  };
+
   // 중요 보관함 북마크 토글
-  const handleToggleBookmark = (item: ConversationExpressionItem) => {
-    const existing = expressions.find(e => e.exampleSentence === item.english || e.english === item.english);
+  const handleToggleBookmark = (item: VocabularyCorpusItem) => {
+    const existing = expressions.find(e => 
+      e.english.toLowerCase().trim() === item.phrase.toLowerCase().trim()
+    );
+
     if (existing) {
       onDeleteExpression?.(existing.id);
     } else {
-      const bestExpression = item.keyExpressions && item.keyExpressions.length > 0 
-        ? item.keyExpressions[0].phrase 
-        : item.english;
-      const bestMeaning = item.keyExpressions && item.keyExpressions.length > 0 
-        ? item.keyExpressions[0].meaning 
-        : item.korean;
-
+      const firstContext = item.contexts[0];
       onAddExpression?.({
         id: `exp-${Date.now()}`,
-        english: bestExpression,
-        korean: bestMeaning,
-        exampleSentence: item.english,
-        tag: item.partnerName,
-        partnerName: item.partnerName,
+        english: item.phrase,
+        korean: item.meaning,
+        exampleSentence: firstContext ? firstContext.englishSentence : item.phrase,
+        tag: '대화수집',
+        partnerName: firstContext ? firstContext.partnerName : undefined,
         createdAt: Date.now()
       });
     }
@@ -137,20 +151,44 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
     setShowAddModal(false);
   };
 
-  // 고유한 대화 파트너 목록 추출 (필터 칩용)
-  const uniquePartners = Array.from(new Set(conversationExpressions.map(c => c.partnerName)));
+  // 문장 내에서 키워드 하이라이트 렌더러
+  const renderHighlightedSentence = (sentence: string, keyword: string) => {
+    if (!keyword) return sentence;
+    const parts = sentence.split(new RegExp(`(${keyword})`, 'gi'));
+    return (
+      <span>
+        {parts.map((part, i) => 
+          part.toLowerCase() === keyword.toLowerCase() ? (
+            <mark key={i} className="bg-[#fef7e0] text-[#b06000] font-bold px-1 py-0.5 rounded">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </span>
+    );
+  };
 
-  // 대화 표현 필터링 (검색어 + 파트너)
-  const filteredConversations = conversationExpressions.filter((item) => {
-    const matchesPartner = selectedPartner === 'all' || item.partnerName === selectedPartner;
-    const q = searchTerm.trim().toLowerCase();
-    const matchesSearch = !q || 
-      item.english.toLowerCase().includes(q) || 
-      item.korean.toLowerCase().includes(q) ||
-      (item.keyExpressions && item.keyExpressions.some(k => k.phrase.toLowerCase().includes(q) || k.meaning.toLowerCase().includes(q)));
-    
-    return matchesPartner && matchesSearch;
-  });
+  // 단어 필터링 및 정렬
+  const filteredVocabulary = vocabularyItems
+    .filter((item) => {
+      const q = searchTerm.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        item.phrase.toLowerCase().includes(q) ||
+        item.meaning.toLowerCase().includes(q) ||
+        item.contexts.some(c => 
+          c.englishSentence.toLowerCase().includes(q) || 
+          c.koreanTranslation.toLowerCase().includes(q)
+        )
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === 'count') return b.usageCount - a.usageCount;
+      if (sortBy === 'alpha') return a.phrase.localeCompare(b.phrase);
+      return b.lastUsedAt - a.lastUsedAt;
+    });
 
   // 중요 보관함 필터링
   const filteredFavorites = expressions.filter((exp) => {
@@ -179,26 +217,26 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
       {/* 1. 상단 서브 탭 스위치 */}
       <div className="p-1 bg-[#eaedff] rounded-2xl flex items-center">
         <button
-          onClick={() => setSubTab('conversations')}
-          className={`flex-1 py-2 rounded-xl text-[12px] sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-1 ${
-            subTab === 'conversations'
+          onClick={() => setSubTab('vocabulary')}
+          className={`flex-1 py-2 rounded-xl text-[12px] sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
+            subTab === 'vocabulary'
               ? 'bg-white text-[#1a73e8] shadow-sm'
               : 'text-[#5f6368] hover:text-[#1f1f1f]'
           }`}
         >
-          <span className="material-symbols-outlined text-[16px]">forum</span>
-          <span>대화 표현 ({conversationExpressions.length})</span>
+          <span className="material-symbols-outlined text-[17px]">auto_stories</span>
+          <span>단어·표현 ({vocabularyItems.length})</span>
         </button>
 
         <button
           onClick={() => setSubTab('favorites')}
-          className={`flex-1 py-2 rounded-xl text-[12px] sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-1 ${
+          className={`flex-1 py-2 rounded-xl text-[12px] sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
             subTab === 'favorites'
               ? 'bg-white text-[#1a73e8] shadow-sm'
               : 'text-[#5f6368] hover:text-[#1f1f1f]'
           }`}
         >
-          <span className="material-symbols-outlined text-[16px] text-[#f29900]" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
+          <span className="material-symbols-outlined text-[17px] text-[#f29900]" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
           <span>중요 보관함 ({expressions.length})</span>
         </button>
 
@@ -216,15 +254,15 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
         )}
       </div>
 
-      {/* 2. 검색 바 & 친구 필터 칩 */}
+      {/* 2. 검색 및 정렬 컨트롤 */}
       {subTab !== 'scripts' && (
         <div className="space-y-2">
-          {/* 검색 입력창 */}
+          {/* 검색창 */}
           <div className="relative flex items-center">
             <span className="material-symbols-outlined absolute left-3 text-[#747775] text-[18px]">search</span>
             <input
               type="text"
-              placeholder="영어 문장 또는 한글 해석 검색..."
+              placeholder="단어(예: cozy) 또는 뜻 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-8 py-2 bg-white border border-[#dadce0] rounded-xl text-[13px] outline-none focus:border-[#1a73e8] placeholder-[#747775]"
@@ -239,182 +277,229 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
             )}
           </div>
 
-          {/* 친구별 필터 칩 (대화 표현 탭인 경우) */}
-          {subTab === 'conversations' && uniquePartners.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              <button
-                onClick={() => setSelectedPartner('all')}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
-                  selectedPartner === 'all'
-                    ? 'bg-[#1a73e8] text-white shadow-xs'
-                    : 'bg-white text-[#5f6368] border border-[#dadce0] hover:bg-[#f1f3f4]'
-                }`}
-              >
-                전체
-              </button>
-              {uniquePartners.map((name) => (
+          {/* 정렬 필터 칩 (단어·표현 탭일 때) */}
+          {subTab === 'vocabulary' && vocabularyItems.length > 0 && (
+            <div className="flex items-center justify-between px-1 text-[11px] text-[#5f6368]">
+              <span>실제 대화 문맥 속에서 학습하는 나만의 코퍼스</span>
+              <div className="flex items-center gap-1">
                 <button
-                  key={name}
-                  onClick={() => setSelectedPartner(name)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
-                    selectedPartner === name
-                      ? 'bg-[#1a73e8] text-white shadow-xs'
-                      : 'bg-white text-[#5f6368] border border-[#dadce0] hover:bg-[#f1f3f4]'
+                  onClick={() => setSortBy('latest')}
+                  className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                    sortBy === 'latest' ? 'bg-[#1a73e8] text-white' : 'bg-[#f1f3f4] text-[#5f6368]'
                   }`}
                 >
-                  {name}
+                  최신순
                 </button>
-              ))}
+                <button
+                  onClick={() => setSortBy('count')}
+                  className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                    sortBy === 'count' ? 'bg-[#1a73e8] text-white' : 'bg-[#f1f3f4] text-[#5f6368]'
+                  }`}
+                >
+                  빈도순
+                </button>
+                <button
+                  onClick={() => setSortBy('alpha')}
+                  className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                    sortBy === 'alpha' ? 'bg-[#1a73e8] text-white' : 'bg-[#f1f3f4] text-[#5f6368]'
+                  }`}
+                >
+                  A-Z
+                </button>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 3. 대화 표현 모아보기 탭 (자동 수집) */}
-      {subTab === 'conversations' && (
+      {/* 3. 단어·표현 사전 뷰 (단어 + 뜻 보기 + 대화 보기) */}
+      {subTab === 'vocabulary' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[12px] font-medium text-[#5f6368]">
-              대화 중 자동으로 해석과 함께 축적된 표현들
-            </span>
-            <span className="text-[11px] text-[#747775]">
-              {filteredConversations.length}개 발견
-            </span>
-          </div>
-
-          {loadingConv ? (
+          {loading ? (
             <div className="py-16 text-center text-[#5f6368] space-y-2 bg-white rounded-2xl border border-[#e0e3e7] p-6">
               <div className="w-6 h-6 border-2 border-[#1a73e8] border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="text-[13px]">대화 표현들을 정리하고 있습니다...</p>
+              <p className="text-[13px]">대화 속 핵심 표현들을 정리하고 있습니다...</p>
             </div>
-          ) : filteredConversations.length === 0 ? (
+          ) : filteredVocabulary.length === 0 ? (
             <div className="py-16 text-center text-[#5f6368] space-y-3 bg-white rounded-2xl border border-[#e0e3e7] p-6">
-              <span className="material-symbols-outlined text-[48px] text-[#bfc6dd]">chat_bubble_outline</span>
+              <span className="material-symbols-outlined text-[48px] text-[#bfc6dd]">menu_book</span>
               <p className="text-[14px] font-semibold text-[#1f1f1f]">
-                {searchTerm ? '검색된 대화 표현이 없습니다.' : '아직 수집된 대화 표현이 없습니다.'}
+                {searchTerm ? '검색된 단어가 없습니다.' : '아직 수집된 단어와 표현이 없습니다.'}
               </p>
               <p className="text-[12px] text-[#747775] leading-relaxed max-w-xs mx-auto">
-                친구 메뉴에서 AI 친구와 스몰톡 대화를 나누면, 주고받은 유용한 문장과 핵심 표현이 이곳에 자동으로 정리됩니다!
+                친구 메뉴에서 AI 친구와 대화를 시작해 보세요! 나눈 대화 속 핵심 표현들이 뜻과 함께 이곳에 자동으로 누적됩니다.
               </p>
             </div>
           ) : (
-            filteredConversations.map((item) => {
-              const isBookmarked = expressions.some(e => e.exampleSentence === item.english || e.english === item.english);
+            filteredVocabulary.map((item) => {
+              const isExpanded = Boolean(expandedWordIds[item.id]);
+              const isBookmarked = expressions.some(e => 
+                e.english.toLowerCase().trim() === item.phrase.toLowerCase().trim()
+              );
 
               return (
                 <div
                   key={item.id}
-                  className="p-3.5 bg-white border border-[#e0e3e7] rounded-2xl shadow-xs hover:border-[#c2e7ff] transition-all space-y-2.5"
+                  className="bg-white border border-[#e0e3e7] rounded-2xl shadow-xs hover:border-[#c2e7ff] transition-all overflow-hidden"
                 >
-                  {/* 카드 상단: 파트너 프로필 & 시간 */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div 
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 shadow-2xs"
-                        style={{ backgroundColor: item.avatarBg, color: '#1f1f1f' }}
-                      >
-                        {item.avatarText}
-                      </div>
-                      <span className="text-[12px] font-semibold text-[#1f1f1f] truncate">
-                        {item.partnerName}와의 대화
-                      </span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
-                        item.sender === 'user' ? 'bg-[#e8f0fe] text-[#1a73e8]' : 'bg-[#f1f3f4] text-[#5f6368]'
-                      }`}>
-                        {item.sender === 'user' ? '내 발화' : '상대방'}
-                      </span>
-                    </div>
+                  {/* 단어 카드 헤더: 표제어 + 발음 + 뜻 + 보관 + 횟수 배지 */}
+                  <div className="p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* 표제어 (단어/숙어) */}
+                        <h3 className="text-[18px] font-bold text-[#1f1f1f] tracking-tight truncate">
+                          {item.phrase}
+                        </h3>
 
-                    <span className="text-[11px] text-[#9aa0a6] shrink-0">
-                      {formatTime(item.timestamp)}
-                    </span>
-                  </div>
-
-                  {/* 영어 문장 본문 */}
-                  <div className="space-y-1">
-                    <p className="text-[15px] font-semibold text-[#1f1f1f] leading-snug">
-                      {item.english}
-                    </p>
-                    {item.korean && (
-                      <p className="text-[13px] text-[#3c4043] leading-relaxed font-normal">
-                        {item.korean}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* 핵심 표현 및 숙어 칩들 */}
-                  {item.keyExpressions && item.keyExpressions.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {item.keyExpressions.map((k, i) => (
+                        {/* 단어 자체 발음 듣기 */}
                         <button
-                          key={i}
-                          onClick={() => handlePlaySpeech(`sub-${item.id}-${i}`, k.phrase)}
-                          className="px-2 py-0.5 rounded-lg bg-[#f0f4f9] hover:bg-[#e2edff] text-[11px] font-medium text-[#1a73e8] inline-flex items-center gap-1 transition-all active:scale-95 text-left"
-                          title="핵심 표현 발음 듣기"
+                          onClick={() => handlePlaySpeech(`word-${item.id}`, item.phrase)}
+                          className={`p-1 rounded-full transition-all active:scale-90 ${
+                            speakingId === `word-${item.id}` 
+                              ? 'text-[#1a73e8] animate-pulse' 
+                              : 'text-[#747775] hover:text-[#1a73e8]'
+                          }`}
+                          title="단어 발음 듣기"
                         >
-                          <span className="font-bold">{k.phrase}</span>: {k.meaning}
-                          <span className="material-symbols-outlined text-[12px] opacity-70">
-                            {speakingId === `sub-${item.id}-${i}` ? 'volume_up' : 'volume_down'}
+                          <span className="material-symbols-outlined text-[18px] leading-none">
+                            {speakingId === `word-${item.id}` ? 'graphic_eq' : 'volume_up'}
                           </span>
                         </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* 사용 횟수 배지 */}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f0f4f9] text-[#1a73e8]">
+                          {item.usageCount}회 대화
+                        </span>
+
+                        {/* 중요 보관함 북마크 토글 */}
+                        <button
+                          onClick={() => handleToggleBookmark(item)}
+                          className={`p-1 rounded-full transition-all active:scale-90 ${
+                            isBookmarked ? 'text-[#f29900]' : 'text-[#dadce0] hover:text-[#f29900]'
+                          }`}
+                          title={isBookmarked ? "중요 보관함에서 해제" : "중요 보관함에 저장"}
+                        >
+                          <span 
+                            className="material-symbols-outlined text-[20px] leading-none"
+                            style={{ fontVariationSettings: isBookmarked ? "'FILL' 1" : "'FILL' 0" }}
+                          >
+                            star
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 뜻 보기 (직관적 노출) */}
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[11px] font-bold text-[#1a73e8] shrink-0">뜻:</span>
+                      <p className="text-[13px] text-[#202124] font-medium leading-snug">
+                        {item.meaning || '한국어 의미 준비 중'}
+                      </p>
+                    </div>
+
+                    {/* 대화보기 토글 버튼 */}
+                    <div className="pt-1">
+                      <button
+                        onClick={() => handleToggleExpand(item.id)}
+                        className="w-full py-1.5 px-3 bg-[#f8fafd] hover:bg-[#f0f4f9] active:bg-[#e8f0fe] rounded-xl text-[12px] font-semibold text-[#1a73e8] flex items-center justify-between transition-colors border border-[#edf0f5]"
+                      >
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">chat</span>
+                          대화보기 ({item.contexts.length}개의 실제 대화 문맥)
+                        </span>
+                        <span className={`material-symbols-outlined text-[16px] transition-transform duration-200 ${
+                          isExpanded ? 'rotate-180' : 'rotate-0'
+                        }`}>
+                          expand_more
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 대화 문장들 아코디언 본체 (부드러운 전개) */}
+                  <div className={`grid transition-all duration-200 ease-in-out border-t border-[#f1f3f4] bg-[#fbfcfd] ${
+                    isExpanded 
+                      ? 'grid-rows-[1fr] opacity-100 p-3' 
+                      : 'grid-rows-[0fr] opacity-0 p-0 pointer-events-none'
+                  }`}>
+                    <div className="overflow-hidden space-y-2.5">
+                      {item.contexts.map((ctx) => (
+                        <div 
+                          key={ctx.msgId}
+                          className="p-2.5 bg-white rounded-xl border border-[#e0e3e7] shadow-2xs space-y-1.5"
+                        >
+                          {/* 파트너 & 시간 & 발화 주체 */}
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-1.5">
+                              <div 
+                                className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0"
+                                style={{ backgroundColor: ctx.avatarBg, color: '#1f1f1f' }}
+                              >
+                                {ctx.avatarText}
+                              </div>
+                              <span className="font-semibold text-[#1f1f1f]">
+                                {ctx.partnerName}와의 대화
+                              </span>
+                              <span className={`text-[9px] px-1 py-0.2 rounded font-medium ${
+                                ctx.sender === 'user' ? 'bg-[#e8f0fe] text-[#1a73e8]' : 'bg-[#f1f3f4] text-[#5f6368]'
+                              }`}>
+                                {ctx.sender === 'user' ? '내가 말함' : '상대방'}
+                              </span>
+                            </div>
+
+                            <span className="text-[#9aa0a6] text-[10px]">
+                              {formatTime(ctx.timestamp)}
+                            </span>
+                          </div>
+
+                          {/* 실제 대화 영문 문장 (키워드 하이라이트) */}
+                          <p className="text-[13px] text-[#1f1f1f] leading-relaxed select-text">
+                            "{renderHighlightedSentence(ctx.englishSentence, item.phrase)}"
+                          </p>
+
+                          {/* 해석보기 */}
+                          {ctx.koreanTranslation && (
+                            <div className="flex items-start gap-1 pt-0.5 text-[12px] text-[#444746] bg-[#f8fafd] p-1.5 rounded-lg border border-[#edf0f5]">
+                              <span className="font-semibold text-[#1a73e8] shrink-0 text-[11px]">해석:</span>
+                              <span className="leading-snug">{ctx.koreanTranslation}</span>
+                            </div>
+                          )}
+
+                          {/* 문장 음성 듣기 & 복사 버튼 */}
+                          <div className="flex items-center justify-end gap-1.5 pt-1">
+                            <button
+                              onClick={() => handlePlaySpeech(ctx.msgId, ctx.englishSentence)}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition-all active:scale-95 ${
+                                speakingId === ctx.msgId 
+                                  ? 'bg-[#1a73e8] text-white animate-pulse' 
+                                  : 'bg-[#f1f3f4] text-[#444746] hover:bg-[#e8f0fe] hover:text-[#1a73e8]'
+                              }`}
+                              title="문장 전체 발음 듣기"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">
+                                {speakingId === ctx.msgId ? 'graphic_eq' : 'volume_up'}
+                              </span>
+                              <span>문장 듣기</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleCopyText(ctx.msgId, ctx.englishSentence)}
+                              className="p-1 rounded-md text-[#747775] hover:text-[#1f1f1f] hover:bg-black/5 transition-colors"
+                              title="문장 복사"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">
+                                {copiedId === ctx.msgId ? 'done' : 'content_copy'}
+                              </span>
+                            </button>
+                            {copiedId === ctx.msgId && (
+                              <span className="text-[10px] text-[#188038] font-medium">복사됨!</span>
+                            )}
+                          </div>
+                        </div>
                       ))}
                     </div>
-                  )}
-
-                  {/* 카드 하단 액션 버튼 바 */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#f1f3f4]">
-                    <div className="flex items-center gap-1">
-                      {/* 전체 문장 TTS 발음 듣기 */}
-                      <button
-                        onClick={() => handlePlaySpeech(item.id, item.english)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all active:scale-95 ${
-                          speakingId === item.id 
-                            ? 'bg-[#1a73e8] text-white animate-pulse' 
-                            : 'bg-[#f1f3f4] text-[#444746] hover:bg-[#e8f0fe] hover:text-[#1a73e8]'
-                        }`}
-                        title="원어민 발음 듣기"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">
-                          {speakingId === item.id ? 'graphic_eq' : 'volume_up'}
-                        </span>
-                        <span>{speakingId === item.id ? '재생 중' : '발음 듣기'}</span>
-                      </button>
-
-                      {/* 문장 복사 */}
-                      <button
-                        onClick={() => handleCopyText(item.id, item.english)}
-                        className="p-1 rounded-full text-[#747775] hover:text-[#1f1f1f] hover:bg-black/5 transition-colors"
-                        title="영문 복사"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          {copiedId === item.id ? 'done' : 'content_copy'}
-                        </span>
-                      </button>
-                      {copiedId === item.id && (
-                        <span className="text-[11px] text-[#188038] font-medium animate-fadeIn">
-                          복사됨!
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 북마크(중요 보관함 저장) 토글 버튼 */}
-                    <button
-                      onClick={() => handleToggleBookmark(item)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all active:scale-95 ${
-                        isBookmarked 
-                          ? 'bg-[#fef7e0] text-[#b06000] border border-[#fce8b2]' 
-                          : 'bg-white border border-[#dadce0] text-[#5f6368] hover:border-[#1a73e8] hover:text-[#1a73e8]'
-                      }`}
-                      title={isBookmarked ? "중요 보관함에서 해제" : "중요 보관함에 저장"}
-                    >
-                      <span 
-                        className={`material-symbols-outlined text-[16px] ${isBookmarked ? 'text-[#f29900]' : 'text-[#747775]'}`}
-                        style={{ fontVariationSettings: isBookmarked ? "'FILL' 1" : "'FILL' 0" }}
-                      >
-                        star
-                      </span>
-                      <span>{isBookmarked ? '보관됨' : '보관'}</span>
-                    </button>
                   </div>
                 </div>
               );
@@ -446,7 +531,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                 {searchTerm ? '검색된 중요 표현이 없습니다.' : '아직 보관된 중요 표현이 없습니다.'}
               </p>
               <p className="text-[12px] text-[#747775] leading-relaxed max-w-xs mx-auto">
-                대화 표현 탭에서 마음에 드는 문장의 ⭐ 보관 버튼을 누르거나, 상단의 '직접 추가'를 통해 나만의 표현을 등록해보세요.
+                단어·표현 탭에서 마음에 드는 단어의 ⭐ 버튼을 누르거나, 상단의 '직접 추가'를 통해 나만의 표현을 등록해보세요.
               </p>
               <button
                 onClick={() => setShowAddModal(true)}
@@ -490,7 +575,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                 </div>
 
                 <div>
-                  <h4 className="text-[16px] font-bold text-[#1f1f1f] leading-snug">
+                  <h4 className="text-[17px] font-bold text-[#1f1f1f] leading-snug">
                     {exp.english}
                   </h4>
                   <p className="text-[13px] font-medium text-[#00897b] mt-0.5">
