@@ -335,64 +335,72 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       title={isExpanded ? '한국어 해석 접기' : '한국어 해석 보기'}
                     >
                       <span className="text-[11px] font-bold tracking-tight">한</span>
-                      <span className="material-symbols-outlined text-[13px] leading-none">
-                        {isExpanded ? 'expand_less' : 'expand_more'}
+                      <span className={`material-symbols-outlined text-[13px] leading-none transition-transform duration-200 ${
+                        isExpanded ? 'rotate-180' : 'rotate-0'
+                      }`}>
+                        expand_more
                       </span>
                     </button>
                   </p>
 
-                  {/* 미니멀 한국어 해석 & 핵심표현 & 한글 초안 아코디언 본체 (0ms 즉시 표시) */}
-                  {isExpanded && (
-                    <div className={`mt-2 pt-2 border-t text-left space-y-1.5 text-[12px] animate-in fade-in-50 duration-150 ${
-                      isUser ? 'border-white/20 text-white/95' : 'border-[#e0e3e7] text-[#1f1f1f]'
-                    }`}>
-                      {/* 한글 초안이 있는 경우 아코디언 내부에 표시 */}
-                      {msg.koreanDraft ? (
-                        <div className="space-y-1">
-                          <div className="flex items-start gap-1">
-                            <span className="font-semibold shrink-0 opacity-80">한글 초안:</span>
-                            <span className="leading-snug">{msg.koreanDraft}</span>
-                          </div>
-                          {translationData?.translation && translationData.translation !== msg.koreanDraft && (
-                            <div className="flex items-start gap-1 pt-0.5">
-                              <span className="font-semibold shrink-0 opacity-80">해석:</span>
-                              <span className="leading-snug">{translationData.translation}</span>
+                  {/* 미니멀 한국어 해석 & 핵심표현 & 한글 초안 아코디언 본체 (열림/닫힘 양방향 부드러운 CSS Grid 애니메이션) */}
+                  <div className={`grid transition-all duration-200 ease-in-out ${
+                    isExpanded 
+                      ? 'grid-rows-[1fr] opacity-100 mt-2' 
+                      : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+                  }`}>
+                    <div className="overflow-hidden">
+                      <div className={`pt-2 border-t text-left space-y-1.5 text-[12px] ${
+                        isUser ? 'border-white/20 text-white/95' : 'border-[#e0e3e7] text-[#1f1f1f]'
+                      }`}>
+                        {/* 한글 초안이 있는 경우 아코디언 내부에 표시 */}
+                        {msg.koreanDraft ? (
+                          <div className="space-y-1">
+                            <div className="flex items-start gap-1">
+                              <span className="font-semibold shrink-0 opacity-80">한글 초안:</span>
+                              <span className="leading-snug">{msg.koreanDraft}</span>
                             </div>
-                          )}
-                        </div>
-                      ) : (
-                        /* 한국어 번역 */
-                        <p className="leading-snug">
-                          {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
-                        </p>
-                      )}
+                            {translationData?.translation && translationData.translation !== msg.koreanDraft && (
+                              <div className="flex items-start gap-1 pt-0.5">
+                                <span className="font-semibold shrink-0 opacity-80">해석:</span>
+                                <span className="leading-snug">{translationData.translation}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* 한국어 번역 */
+                          <p className="leading-snug">
+                            {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
+                          </p>
+                        )}
 
-                      {/* 핵심 표현 및 숙어 */}
-                      {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {translationData.keyExpressions.map((exp, i) => (
-                            <span
-                              key={i}
-                              onMouseDown={handlePreventBlur}
-                              onPointerDown={handlePreventBlur}
-                              onClick={() => handlePlaySpeech(`ke-${i}-${msg.id}`, exp.phrase)}
-                              className={`text-[10px] px-1.5 py-0.5 rounded cursor-pointer inline-flex items-center gap-1 active:scale-95 transition-all ${
-                                isUser 
-                                  ? 'bg-white/15 text-white hover:bg-white/25' 
-                                  : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff]'
-                              }`}
-                              title="핵심 표현 발음 듣기"
-                            >
-                              <strong className="font-semibold">{exp.phrase}</strong>: {exp.meaning}
-                              <span className="material-symbols-outlined text-[11px] opacity-70">
-                                {speakingMsgId === `ke-${i}-${msg.id}` ? 'volume_up' : 'volume_down'}
+                        {/* 핵심 표현 및 숙어 */}
+                        {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {translationData.keyExpressions.map((exp, i) => (
+                              <span
+                                key={i}
+                                onMouseDown={handlePreventBlur}
+                                onPointerDown={handlePreventBlur}
+                                onClick={() => handlePlaySpeech(`ke-${i}-${msg.id}`, exp.phrase)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded cursor-pointer inline-flex items-center gap-1 active:scale-95 transition-all ${
+                                  isUser 
+                                    ? 'bg-white/15 text-white hover:bg-white/25' 
+                                    : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff]'
+                                }`}
+                                title="핵심 표현 발음 듣기"
+                              >
+                                <strong className="font-semibold">{exp.phrase}</strong>: {exp.meaning}
+                                <span className="material-symbols-outlined text-[11px] opacity-70">
+                                  {speakingMsgId === `ke-${i}-${msg.id}` ? 'volume_up' : 'volume_down'}
+                                </span>
                               </span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </div>
