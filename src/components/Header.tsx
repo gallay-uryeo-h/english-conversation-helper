@@ -200,41 +200,41 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-[#f0f4f9] border-b border-[#e0e3e7] pt-[env(safe-area-inset-top,0px)] w-full relative">
-      <div className="h-14 px-3 sm:px-4 flex items-center justify-between w-full">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="h-11 sm:h-12 px-3 sm:px-4 flex items-center justify-between w-full">
+        <div className="flex items-center gap-1.5 min-w-0">
           {onBack && currentTab === 'chat' && (
             <button 
               onClick={onBack}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95 shrink-0"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#444746] hover:bg-black/5 active:scale-95 shrink-0"
               title="이전 화면으로 돌아가기"
             >
-              <span className="material-symbols-outlined text-[22px]">arrow_back</span>
+              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
             </button>
           )}
 
           <div className="truncate">
-            <h1 className="text-[17px] font-semibold text-[#1f1f1f] truncate leading-tight flex items-center gap-1.5">
+            <h1 className="text-[15px] sm:text-[16px] font-semibold text-[#1f1f1f] truncate leading-tight flex items-center gap-1.5">
               {currentTab === 'friends' && (
                 <>
-                  <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">group</span>
+                  <span className="material-symbols-outlined text-[#1a73e8] text-[18px]">group</span>
                   친구
                 </>
               )}
               {currentTab === 'threads' && (
                 <>
-                  <span className="material-symbols-outlined text-[#1a73e8] text-[20px]">forum</span>
+                  <span className="material-symbols-outlined text-[#1a73e8] text-[18px]">forum</span>
                   대화 목록
                 </>
               )}
               {currentTab === 'chat' && (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#188038] animate-pulse shrink-0"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#188038] animate-pulse shrink-0"></span>
                   <span className="truncate">{activeThread?.partnerName || '대화'}</span>
                 </>
               )}
               {currentTab === 'archive' && (
                 <>
-                  <span className="material-symbols-outlined text-[#795900] text-[20px]">bookmark</span>
+                  <span className="material-symbols-outlined text-[#795900] text-[18px]">bookmark</span>
                   표현 보관함
                 </>
               )}
@@ -257,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
           {user && (
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="relative w-8 h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0"
+              className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border border-[#dadce0] hover:ring-2 hover:ring-[#1a73e8]/30 transition-all flex items-center justify-center bg-[#e8f0fe] text-[#1a73e8] text-xs font-bold shrink-0"
               title={`${user.displayName || user.email} 프로필 및 AI 설정`}
             >
               {user.photoURL ? (
@@ -273,7 +273,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* 관리자 뱃지 도트 */}
               {isAdmin && (
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#f29900] border-2 border-white rounded-full"></span>
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#f29900] border-2 border-white rounded-full"></span>
               )}
             </button>
           )}
@@ -287,7 +287,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="fixed inset-0 z-40 bg-black/10" 
             onClick={() => setShowProfileMenu(false)}
           />
-          <div className="absolute right-3 sm:right-4 top-14 mt-1 w-80 sm:w-96 max-h-[88vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-[#dadce0] p-4 z-50 animate-fadeIn text-left space-y-3">
+          <div className="absolute right-3 sm:right-4 top-11 sm:top-12 mt-1 w-80 sm:w-96 max-h-[88vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-[#dadce0] p-4 z-50 animate-fadeIn text-left space-y-3">
             
             {/* 유저 정보 */}
             <div className="flex items-center gap-3 pb-3 border-b border-[#f1f3f4]">

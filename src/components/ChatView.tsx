@@ -16,7 +16,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
   const [isDebouncing, setIsDebouncing] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
 
   // 말풍선 한국어 해석 아코디언 펼침 여부 상태 (0ms 즉시 토글)
   const [expandedMsgIds, setExpandedMsgIds] = useState<Record<string, boolean>>({});
@@ -526,22 +525,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* 5. 하단 입력 바 (안전영역 대응 및 키보드 밀림 방지) */}
+      {/* 5. 하단 입력 바 (안전영역 대응 및 키보드 밀림 방지 - 시원하게 확장된 텍스트박스) */}
       <div className="p-3 bg-[#f0f4f9] border-t border-[#e0e3e7] flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <button
-          onClick={() => setIsRecording(!isRecording)}
-          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 ${
-            isRecording 
-              ? 'bg-[#d93025] text-white animate-pulse' 
-              : 'bg-white text-[#444746] hover:bg-black/5 border border-[#dadce0]'
-          }`}
-          title="음성 입력"
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            {isRecording ? 'mic' : 'mic_none'}
-          </span>
-        </button>
-
         <input
           ref={inputRef}
           type="text"
