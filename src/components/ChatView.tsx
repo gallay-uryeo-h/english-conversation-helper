@@ -16,6 +16,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
   const [isDebouncing, setIsDebouncing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   // 말풍선 한국어 해석 아코디언 펼침 여부 상태 (0ms 즉시 토글)
   const [expandedMsgIds, setExpandedMsgIds] = useState<Record<string, boolean>>({});
@@ -164,61 +165,80 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 400);
   };
 
-  // 텍스트 직접 전송 (추천 카드 선택 또는 엔터 시 스마트 자동 영작 정제)
+  // 텍스트 직접 전송 (추천 카드 선택 또는 엔터 시 스마트 자동 영작 정제 및 중복 전송 방지)
   const handleSend = async (textToSend?: string, koreanDraft?: string, precomputedTranslation?: MessageTranslation) => {
+    if (isSending) return;
+
     let candidateText = textToSend;
     let candidateDraft = koreanDraft;
 
     // 텍스트박스에서 엔터/전송 버튼을 누른 경우 (textToSend 미지정)
     if (!candidateText && inputText.trim()) {
+      setIsSending(true);
       const rawInput = inputText.trim();
       if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(rawInput)) {
         candidateDraft = rawInput;
       }
 
-      // 1. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
-      if (recommendations.length > 0) {
-        const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
-        candidateText = naturalCard.english;
-      } 
-      // 2. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
-      else {
-        try {
-          setIsDebouncing(true);
-          const recs = await aiService.generateRecommendationsAsync(rawInput);
-          if (recs && recs.length > 0) {
-            const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
-            candidateText = naturalCard.english;
+      try {
+        // 1. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
+        if (recommendations.length > 0) {
+          const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
+          candidateText = naturalCard.english;
+        } 
+        // 2. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
+        else {
+          try {
+            setIsDebouncing(true);
+            const recs = await aiService.generateRecommendationsAsync(rawInput);
+            if (recs && recs.length > 0) {
+              const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
+              candidateText = naturalCard.english;
+            }
+          } catch (err) {
+            console.warn("Instant recommendation error on send:", err);
+          } finally {
+            setIsDebouncing(false);
           }
-        } catch (err) {
-          console.warn("Instant recommendation error on send:", err);
-        } finally {
-          setIsDebouncing(false);
         }
-      }
 
-      // 3. 만약 추천 생성 실패 시 fallback
-      if (!candidateText) {
+        // 3. 만약 추천 생성 실패 시 fallback
+        if (!candidateText) {
+          candidateText = rawInput;
+        }
+      } catch (err) {
+        console.warn("Send handling error:", err);
         candidateText = rawInput;
       }
     }
 
     const finalMsg = candidateText || inputText;
-    if (!finalMsg.trim()) return;
+    if (!finalMsg.trim()) {
+      setIsSending(false);
+      return;
+    }
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
-    onSendMessage(
-      finalMsg.trim(), 
-      candidateDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
-      recommendations,
-      precomputedTranslation
-    );
-    setInputText('');
-    setRecommendations([]);
-    setIsDebouncing(false);
+    try {
+      setIsSending(true);
+      onSendMessage(
+        finalMsg.trim(), 
+        candidateDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
+        recommendations,
+        precomputedTranslation
+      );
+      setInputText('');
+      setRecommendations([]);
+      setIsDebouncing(false);
+    } finally {
+      // 아주 짧은 딜레이 후 전송 상태 해제 (중복 연타 방지)
+      setTimeout(() => {
+        setIsSending(false);
+      }, 250);
+    }
   };
 
   // 추천 카드 클릭 시 해당 영문으로 즉시 전송
@@ -567,7 +587,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <input
           ref={inputRef}
           type="text"
-          placeholder="한글 초안이나 영어 메시지를 입력하세요..."
+          disabled={isSending}
+          placeholder={isSending ? "자연스러운 영어로 정제하여 전송 중..." : "한글 초안이나 영어 메시지를 입력하세요..."}
           value={inputText}
           onChange={handleInputChange}
           onFocus={() => {
@@ -582,21 +603,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
             }, 100);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !isSending) {
               handleSend();
             }
           }}
-          className="flex-1 px-4 py-2.5 bg-white border border-[#dadce0] rounded-full text-[14px] outline-none focus:border-[#1a73e8] placeholder-[#747775]"
+          className={`flex-1 px-4 py-2.5 bg-white border border-[#dadce0] rounded-full text-[14px] outline-none focus:border-[#1a73e8] placeholder-[#747775] transition-all ${
+            isSending ? 'opacity-70 bg-[#f8fafd] cursor-not-allowed' : ''
+          }`}
         />
 
         <button
           onMouseDown={handlePreventBlur}
           onPointerDown={handlePreventBlur}
           onClick={() => handleSend()}
-          disabled={!inputText.trim()}
-          className="w-10 h-10 rounded-full bg-[#1a73e8] text-white flex items-center justify-center disabled:opacity-40 hover:bg-[#1557b0] active:scale-95 transition-all shadow-sm shrink-0"
+          disabled={!inputText.trim() || isSending}
+          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm shrink-0 ${
+            isSending 
+              ? 'bg-[#1a73e8] text-white cursor-not-allowed opacity-85' 
+              : 'bg-[#1a73e8] text-white disabled:opacity-40 hover:bg-[#1557b0] active:scale-95'
+          }`}
+          title={isSending ? "영작 정제 및 전송 중..." : "전송"}
         >
-          <span className="material-symbols-outlined text-[20px]">send</span>
+          {isSending ? (
+            <span className="material-symbols-outlined text-[19px] animate-spin">
+              progress_activity
+            </span>
+          ) : (
+            <span className="material-symbols-outlined text-[20px]">
+              send
+            </span>
+          )}
         </button>
       </div>
     </div>
