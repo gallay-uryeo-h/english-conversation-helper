@@ -299,25 +299,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       : 'bg-white text-[#1f1f1f] border border-[#e0e3e7] rounded-tl-xs'
                   }`}
                 >
-                  {/* 문장 텍스트 및 문장 끝 초미니멀 음성 듣기(TTS) & '한' 인라인 토글 버튼 */}
+                  {/* 문장 텍스트 및 문장 끝 세련된 음성 듣기(TTS) & '한' 인라인 토글 배지 */}
                   <p className="whitespace-pre-wrap select-text leading-relaxed">
                     <span>{msg.text}</span>
 
-                    {/* Speech API 음성 듣기 아이콘 */}
+                    {/* Speech API 원어민 발음 듣기 버튼 */}
                     <button
                       type="button"
                       onMouseDown={handlePreventBlur}
                       onPointerDown={handlePreventBlur}
                       onClick={() => handlePlaySpeech(msg.id, msg.text)}
-                      className={`inline-flex items-center ml-1.5 align-baseline transition-all active:scale-90 cursor-pointer select-none ${
+                      className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded-full align-middle ml-1.5 transition-all duration-150 active:scale-90 cursor-pointer select-none shadow-2xs ${
                         speakingMsgId === msg.id 
-                          ? (isUser ? 'text-white animate-pulse' : 'text-[#1a73e8] animate-pulse')
-                          : (isUser ? 'text-white/70 hover:text-white' : 'text-[#747775] hover:text-[#1a73e8]')
+                          ? (isUser 
+                              ? 'bg-white text-[#1a73e8] ring-2 ring-white/60 animate-pulse' 
+                              : 'bg-[#1a73e8] text-white ring-2 ring-[#c2e7ff] animate-pulse')
+                          : (isUser 
+                              ? 'bg-white/20 text-white/90 hover:bg-white/35 hover:text-white' 
+                              : 'bg-[#e8f0fe] text-[#1a73e8] hover:bg-[#d2e3fc] hover:shadow-xs')
                       }`}
                       title={speakingMsgId === msg.id ? "음성 재생 중지" : "원어민 발음 듣기"}
                     >
-                      <span className="material-symbols-outlined text-[15px] leading-none">
-                        volume_up
+                      <span className="material-symbols-outlined text-[13px] leading-none">
+                        {speakingMsgId === msg.id ? 'graphic_eq' : 'volume_up'}
                       </span>
                     </button>
 
@@ -327,15 +331,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       onMouseDown={handlePreventBlur}
                       onPointerDown={handlePreventBlur}
                       onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
-                      className={`inline-flex items-center gap-0.5 ml-1 align-baseline transition-opacity active:scale-95 cursor-pointer select-none ${
+                      className={`inline-flex items-center justify-center h-[22px] px-1.5 rounded-full align-middle ml-1 transition-all duration-150 active:scale-95 cursor-pointer select-none gap-0.5 shadow-2xs ${
                         isUser 
-                          ? 'text-white/70 hover:text-white' 
-                          : 'text-[#747775] hover:text-[#1a73e8]'
+                          ? (isExpanded 
+                              ? 'bg-white text-[#1a73e8]' 
+                              : 'bg-white/20 text-white/90 hover:bg-white/35 hover:text-white')
+                          : (isExpanded 
+                              ? 'bg-[#1a73e8] text-white' 
+                              : 'bg-[#f1f3f4] text-[#5f6368] hover:bg-[#e8eaed] hover:text-[#1f1f1f]')
                       }`}
                       title={isExpanded ? '한국어 해석 접기' : '한국어 해석 보기'}
                     >
-                      <span className="text-[11px] font-bold tracking-tight">한</span>
-                      <span className={`material-symbols-outlined text-[13px] leading-none transition-transform duration-200 ${
+                      <span className="text-[11px] font-bold tracking-tight leading-none">한</span>
+                      <span className={`material-symbols-outlined text-[12px] leading-none transition-transform duration-200 ${
                         isExpanded ? 'rotate-180' : 'rotate-0'
                       }`}>
                         expand_more
