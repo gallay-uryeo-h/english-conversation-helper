@@ -199,7 +199,7 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // 메시지 전송 및 AI 응답 처리 (0ms 즉각 반응 낙관적 UI)
+  // 메시지 전송 및 AI 응답 처리 (0ms 즉각 로컬 영구 보존 + 백그라운드 동기화)
   const handleSendMessage = async (
     text: string, 
     koreanDraft?: string, 
@@ -207,6 +207,8 @@ const MainApp: React.FC = () => {
     precomputedTranslation?: MessageTranslation
   ) => {
     if (!activeThread) return;
+    const currentThreadId = activeThread.id;
+    const currentPartnerName = activeThread.partnerName;
 
     // 1. 유저 메시지 화면에 0ms 즉시 추가
     const matchedRec = recommendations?.find(r => r.english === text);
@@ -228,13 +230,25 @@ const MainApp: React.FC = () => {
       translation: initialTranslation
     };
 
+    // UI state 즉시 반영
     setMessages((prev) => [...prev, userMsg]);
-    storageService.saveMessage(activeThread.id, userMsg);
+
+    // 스레드 목록 프리뷰 즉시 업데이트
+    setThreads(prev => prev.map(t => t.id === currentThreadId ? {
+      ...t,
+      lastMessage: userMsg.text,
+      lastSender: 'user',
+      messageCount: (t.messageCount || 0) + 1,
+      updatedAt: userMsg.timestamp
+    } : t));
+
+    // 로컬스토리지 0ms 즉각 저장 (사용자가 즉시 방을 나가도 절대 유실되지 않음)
+    await storageService.saveMessage(currentThreadId, userMsg);
 
     // 2. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
     try {
       const replyData = await aiService.generateAssistantReplyAsync(
-        activeThread.partnerName, 
+        currentPartnerName, 
         text
       );
       const assistantMsg: Message = {
@@ -244,8 +258,19 @@ const MainApp: React.FC = () => {
         timestamp: Date.now(),
         translation: replyData.translation
       };
+
+      // 사용자가 방을 나간 상태여도 백그라운드에서 스레드에 안전하게 저장 완료
+      await storageService.saveMessage(currentThreadId, assistantMsg);
+
+      // UI state 동기화
       setMessages((prev) => [...prev, assistantMsg]);
-      await storageService.saveMessage(activeThread.id, assistantMsg);
+      setThreads(prev => prev.map(t => t.id === currentThreadId ? {
+        ...t,
+        lastMessage: assistantMsg.text,
+        lastSender: 'assistant',
+        messageCount: (t.messageCount || 0) + 1,
+        updatedAt: assistantMsg.timestamp
+      } : t));
     } catch (e) {
       console.warn("Assistant reply error:", e);
     }

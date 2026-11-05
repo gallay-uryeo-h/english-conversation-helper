@@ -6,7 +6,7 @@ import {
   setDoc,
   User
 } from '../firebase';
-import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember } from '../types';
+import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember, ConversationExpressionItem } from '../types';
 
 // 기본 제공 AI 영어 회화 친구
 export const DEFAULT_AI_FRIEND: Friend = {
@@ -287,31 +287,87 @@ export const storageService = {
     localStorage.removeItem(localKey);
   },
 
-  // 특정 스레드의 메시지 목록 가져오기
+  // 특정 스레드의 메시지 목록 가져오기 (오프라인 우선 + 원격 병합)
   async getMessages(threadId: string): Promise<Message[]> {
     const docId = getDocId(`messages_${threadId}`);
     const localKey = getLocalKey(`app_messages_${threadId}`);
 
+    // 1. 로컬에 저장된 메시지 즉시 확보 (0ms)
+    let localMsgs: Message[] = [];
+    try {
+      const raw = localStorage.getItem(localKey);
+      if (raw) localMsgs = JSON.parse(raw);
+    } catch (e) {}
+
+    // 2. 원격 Firestore에서 최신 메시지 조회 및 병합
     try {
       const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
       if (snap.exists() && snap.data().items) {
-        return snap.data().items as Message[];
+        const remoteMsgs = snap.data().items as Message[];
+        // ID 기준으로 로컬과 원격 메시지 병합 (중복 방지 및 누락 방지)
+        const msgMap = new Map<string, Message>();
+        remoteMsgs.forEach(m => msgMap.set(m.id, m));
+        localMsgs.forEach(m => {
+          if (!msgMap.has(m.id)) {
+            msgMap.set(m.id, m);
+          }
+        });
+        const merged = Array.from(msgMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+        try {
+          localStorage.setItem(localKey, JSON.stringify(merged));
+        } catch (e) {}
+        return merged;
       }
-      return [];
     } catch (e) {
-      const local = localStorage.getItem(localKey);
-      if (local) return JSON.parse(local);
-      return [];
+      console.warn("getMessages remote error, falling back to local:", e);
     }
+
+    return localMsgs;
   },
 
-  // 메시지 전송 및 저장
+  // 메시지 전송 및 저장 (0ms 로컬 즉시 영구 저장 + Firestore 백그라운드 동기화)
   async saveMessage(threadId: string, message: Message): Promise<void> {
     const docId = getDocId(`messages_${threadId}`);
     const threadsDocId = getDocId("threads_data");
     const localKey = getLocalKey(`app_messages_${threadId}`);
+    const localThreadsKey = getLocalKey('app_threads');
 
+    // 1. [0ms 동기식 보장] 브라우저 로컬 스토리지에 즉시 무조건 먼저 저장!
+    // 사용자가 전송 누르고 1ms 만에 화면을 나가더라도 절대 사라지지 않음
+    let currentLocalMsgs: Message[] = [];
+    try {
+      const raw = localStorage.getItem(localKey);
+      if (raw) currentLocalMsgs = JSON.parse(raw);
+    } catch (e) {}
+    
+    // 이미 동일 id가 없으면 추가
+    if (!currentLocalMsgs.some(m => m.id === message.id)) {
+      currentLocalMsgs.push(message);
+      try {
+        localStorage.setItem(localKey, JSON.stringify(currentLocalMsgs));
+      } catch (e) {
+        console.warn("localStorage setItem error:", e);
+      }
+    }
+
+    // 로컬 스레드 목록 최신 정보 업데이트
+    try {
+      const rawThreads = localStorage.getItem(localThreadsKey);
+      if (rawThreads) {
+        const localThreads: Thread[] = JSON.parse(rawThreads);
+        const target = localThreads.find(t => t.id === threadId);
+        if (target) {
+          target.lastMessage = message.text;
+          target.lastSender = message.sender;
+          target.messageCount = currentLocalMsgs.length;
+          target.updatedAt = message.timestamp;
+          localStorage.setItem(localThreadsKey, JSON.stringify(localThreads));
+        }
+      }
+    } catch (e) {}
+
+    // 2. [원격 비동기 백업] Firestore에 동기화
     try {
       const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
@@ -319,7 +375,9 @@ export const storageService = {
       if (snap.exists() && snap.data().items) {
         items = snap.data().items;
       }
-      items.push(message);
+      if (!items.some(m => m.id === message.id)) {
+        items.push(message);
+      }
       await setDoc(msgDocRef, { items });
 
       // 스레드 최신 메시지 업데이트
@@ -337,21 +395,41 @@ export const storageService = {
         }
       }
     } catch (e) {
-      const existing: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
-      existing.push(message);
-      localStorage.setItem(localKey, JSON.stringify(existing));
+      console.warn("saveMessage Firestore sync error (local data is safe):", e);
+    }
+  },
 
-      const localThreadsKey = getLocalKey('app_threads');
-      const localThreads: Thread[] = JSON.parse(localStorage.getItem(localThreadsKey) || '[]');
-      const targetLocal = localThreads.find(t => t.id === threadId);
-      if (targetLocal) {
-        targetLocal.lastMessage = message.text;
-        targetLocal.lastSender = message.sender;
-        targetLocal.messageCount = existing.length;
-        targetLocal.updatedAt = message.timestamp;
-        localStorage.setItem(localThreadsKey, JSON.stringify(localThreads));
+  // 모든 대화방에서 자동으로 쌓인 유용한 표현 및 해석 목록 가져오기
+  async getAllConversationExpressions(): Promise<ConversationExpressionItem[]> {
+    const threads = await this.getThreads();
+    const expressionsList: ConversationExpressionItem[] = [];
+
+    for (const thread of threads) {
+      const messages = await this.getMessages(thread.id);
+      for (const msg of messages) {
+        // 한글 해석이 있거나 핵심 표현이 있는 문장 필터링
+        const hasTranslation = Boolean(msg.translation?.translation && msg.translation.translation.trim().length > 0);
+        const hasKeyExpressions = Boolean(msg.translation?.keyExpressions && msg.translation.keyExpressions.length > 0);
+
+        if (hasTranslation || hasKeyExpressions) {
+          expressionsList.push({
+            id: `conv-exp-${msg.id}`,
+            threadId: thread.id,
+            partnerName: thread.partnerName,
+            avatarBg: thread.avatarBg,
+            avatarText: thread.avatarText,
+            english: msg.text,
+            korean: msg.translation?.translation || msg.koreanDraft || '',
+            keyExpressions: msg.translation?.keyExpressions || [],
+            timestamp: msg.timestamp,
+            sender: msg.sender
+          });
+        }
       }
     }
+
+    // 최신 시간순 내림차순 정렬
+    return expressionsList.sort((a, b) => b.timestamp - a.timestamp);
   },
 
   // 보관된 표현 목록 가져오기

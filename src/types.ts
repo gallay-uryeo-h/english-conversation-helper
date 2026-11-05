@@ -55,6 +55,20 @@ export interface SavedExpression {
   situation?: string;
   tag: string;
   createdAt: number;
+  partnerName?: string;
+}
+
+export interface ConversationExpressionItem {
+  id: string;
+  threadId: string;
+  partnerName: string;
+  avatarBg: string;
+  avatarText: string;
+  english: string;
+  korean: string;
+  keyExpressions?: Array<{ phrase: string; meaning: string }>;
+  timestamp: number;
+  sender: 'user' | 'assistant';
 }
 
 export interface ScriptDialogueLine {
