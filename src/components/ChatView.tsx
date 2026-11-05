@@ -164,9 +164,46 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 400);
   };
 
-  // 텍스트 직접 전송 (0ms 즉시 전송, 사전 번역 탑재)
-  const handleSend = (textToSend?: string, koreanDraft?: string, precomputedTranslation?: MessageTranslation) => {
-    const finalMsg = textToSend || inputText;
+  // 텍스트 직접 전송 (추천 카드 선택 또는 엔터 시 스마트 자동 영작 정제)
+  const handleSend = async (textToSend?: string, koreanDraft?: string, precomputedTranslation?: MessageTranslation) => {
+    let candidateText = textToSend;
+    let candidateDraft = koreanDraft;
+
+    // 텍스트박스에서 엔터/전송 버튼을 누른 경우 (textToSend 미지정)
+    if (!candidateText && inputText.trim()) {
+      const rawInput = inputText.trim();
+      if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(rawInput)) {
+        candidateDraft = rawInput;
+      }
+
+      // 1. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
+      if (recommendations.length > 0) {
+        const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
+        candidateText = naturalCard.english;
+      } 
+      // 2. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
+      else {
+        try {
+          setIsDebouncing(true);
+          const recs = await aiService.generateRecommendationsAsync(rawInput);
+          if (recs && recs.length > 0) {
+            const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
+            candidateText = naturalCard.english;
+          }
+        } catch (err) {
+          console.warn("Instant recommendation error on send:", err);
+        } finally {
+          setIsDebouncing(false);
+        }
+      }
+
+      // 3. 만약 추천 생성 실패 시 fallback
+      if (!candidateText) {
+        candidateText = rawInput;
+      }
+    }
+
+    const finalMsg = candidateText || inputText;
     if (!finalMsg.trim()) return;
 
     if (debounceTimerRef.current) {
@@ -175,7 +212,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     onSendMessage(
       finalMsg.trim(), 
-      koreanDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
+      candidateDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
       recommendations,
       precomputedTranslation
     );
