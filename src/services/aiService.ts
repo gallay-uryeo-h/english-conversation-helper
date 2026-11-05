@@ -15,6 +15,10 @@ export interface SmartReplyItem {
   translation: MessageTranslation;
 }
 
+// 메모리 캐시 (선언을 최상단으로 배치하여 TDZ ReferenceError 방지)
+const translationCache = new Map<string, MessageTranslation>();
+const smartRepliesCache = new Map<string, string[]>();
+
 // 기본 스마트 빠른 답장 목록 (사전 번역 탑재)
 export const DEFAULT_SMART_REPLIES: SmartReplyItem[] = [
   {
@@ -55,10 +59,6 @@ export const TONE_ORDER: Record<string, number> = {
 export const sortRecommendationsByTone = (list: RecommendationCard[]): RecommendationCard[] => {
   return [...list].sort((a, b) => (TONE_ORDER[a.tone] || 99) - (TONE_ORDER[b.tone] || 99));
 };
-
-// 메모리 캐시
-const translationCache = new Map<string, MessageTranslation>();
-const smartRepliesCache = new Map<string, string[]>();
 
 export const getGroqApiKey = (): string => {
   return localStorage.getItem('groq_api_key') || (import.meta.env.VITE_GROQ_API_KEY as string) || "";
