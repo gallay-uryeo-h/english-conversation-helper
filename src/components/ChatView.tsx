@@ -325,23 +325,31 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </button>
                   </p>
 
-                  {/* 한글 원문 초안이 있는 경우 표시 */}
-                  {msg.koreanDraft && (
-                    <div className="mt-1.5 pt-1.5 border-t border-white/20 text-[11px] opacity-90">
-                      <span className="font-semibold mr-1">한글 초안:</span>
-                      {msg.koreanDraft}
-                    </div>
-                  )}
-
-                  {/* 미니멀 한국어 해석 & 핵심표현 아코디언 본체 (0ms 즉시 표시) */}
+                  {/* 미니멀 한국어 해석 & 핵심표현 & 한글 초안 아코디언 본체 (0ms 즉시 표시) */}
                   {isExpanded && (
                     <div className={`mt-2 pt-2 border-t text-left space-y-1.5 text-[12px] animate-in fade-in-50 duration-150 ${
                       isUser ? 'border-white/20 text-white/95' : 'border-[#e0e3e7] text-[#1f1f1f]'
                     }`}>
-                      {/* 한국어 번역 */}
-                      <p className="leading-snug">
-                        {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
-                      </p>
+                      {/* 한글 초안이 있는 경우 아코디언 내부에 표시 */}
+                      {msg.koreanDraft ? (
+                        <div className="space-y-1">
+                          <div className="flex items-start gap-1">
+                            <span className="font-semibold shrink-0 opacity-80">한글 초안:</span>
+                            <span className="leading-snug">{msg.koreanDraft}</span>
+                          </div>
+                          {translationData?.translation && translationData.translation !== msg.koreanDraft && (
+                            <div className="flex items-start gap-1 pt-0.5">
+                              <span className="font-semibold shrink-0 opacity-80">해석:</span>
+                              <span className="leading-snug">{translationData.translation}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* 한국어 번역 */
+                        <p className="leading-snug">
+                          {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
+                        </p>
+                      )}
 
                       {/* 핵심 표현 및 숙어 */}
                       {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
