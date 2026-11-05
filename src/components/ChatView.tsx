@@ -345,9 +345,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="flex flex-col h-full flex-1 min-h-0 w-full relative overflow-hidden">
-      {/* 1. 메시지 리스트 영역 (스마트 스크롤 & 키보드 빈공간 축소) */}
+      {/* 1. 메시지 리스트 영역 (스마트 스크롤 & 대화 터치 시 자연스러운 키패드 닫힘) */}
       <div 
         ref={scrollContainerRef}
+        onTouchStart={() => {
+          if (document.activeElement === inputRef.current) {
+            inputRef.current?.blur();
+            isInputFocusedRef.current = false;
+          }
+        }}
         className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain flex flex-col"
       >
         {messages.length === 0 ? (
@@ -396,11 +402,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <p className="whitespace-pre-wrap select-text leading-relaxed">
                     <span>{msg.text}</span>
 
-                    {/* Speech API 원어민 발음 듣기 버튼 */}
+                    {/* Speech API 원어민 발음 듣기 버튼 (키패드 불필요한 재팝업 방지) */}
                     <button
                       type="button"
-                      onMouseDown={handlePreventBlur}
-                      onPointerDown={handlePreventBlur}
                       onClick={() => handlePlaySpeech(msg.id, msg.text)}
                       className={`inline-flex items-center justify-center align-middle ml-1.5 p-0.5 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
                         speakingMsgId === msg.id 
@@ -414,11 +418,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       </span>
                     </button>
 
-                    {/* 한국어 해석 아코디언 토글 버튼 */}
+                    {/* 한국어 해석 아코디언 토글 버튼 (키패드 불필요한 재팝업 방지) */}
                     <button
                       type="button"
-                      onMouseDown={handlePreventBlur}
-                      onPointerDown={handlePreventBlur}
                       onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
                       className={`inline-flex items-center justify-center align-middle ml-1 p-0.5 transition-all duration-150 active:scale-95 cursor-pointer select-none gap-0.5 ${
                         isUser 
@@ -451,27 +453,41 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           {translationData?.translation || '한국어 해석을 준비하고 있습니다...'}
                         </p>
 
-                        {/* 핵심 어휘 및 관용구 */}
+                        {/* 핵심 어휘 및 관용구 (1개 표현당 1줄 독립 미니 행 구조 - 라인브레이크 엉킴 방지) */}
                         {translationData?.keyExpressions && translationData.keyExpressions.length > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
+                          <div className="space-y-1 pt-1">
                             {translationData.keyExpressions.map((exp, i) => (
-                              <span
+                              <div
                                 key={i}
-                                onMouseDown={handlePreventBlur}
-                                onPointerDown={handlePreventBlur}
                                 onClick={() => handlePlaySpeech(`ke-${i}-${msg.id}`, exp.phrase)}
-                                className={`text-[10px] px-1.5 py-0.5 rounded cursor-pointer inline-flex items-center gap-1 active:scale-95 transition-all ${
+                                className={`px-2 py-1.5 rounded-lg cursor-pointer flex items-center justify-between gap-2 active:scale-98 transition-all ${
                                   isUser 
-                                    ? 'bg-white/15 text-white hover:bg-white/25' 
-                                    : 'bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e2edff]'
+                                    ? 'bg-white/15 hover:bg-white/25 text-white' 
+                                    : 'bg-[#f0f4f9] hover:bg-[#e2edff] text-[#1f1f1f]'
                                 }`}
                                 title="핵심 표현 발음 듣기"
                               >
-                                <strong className="font-semibold">{exp.phrase}</strong>: {exp.meaning}
-                                <span className="material-symbols-outlined text-[11px] opacity-70">
-                                  {speakingMsgId === `ke-${i}-${msg.id}` ? 'volume_up' : 'volume_down'}
+                                <div className="flex items-baseline gap-1.5 min-w-0 flex-1 leading-snug">
+                                  {/* 영어 표제어: 절대 줄바꿈되지 않고 굵게 고정 */}
+                                  <span className={`text-[11px] font-bold shrink-0 ${
+                                    isUser ? 'text-white' : 'text-[#1a73e8]'
+                                  }`}>
+                                    {exp.phrase}
+                                  </span>
+                                  <span className="opacity-40 text-[10px] shrink-0">·</span>
+                                  {/* 한글 뜻: 단어 단위로 자연스럽게 줄바꿈 */}
+                                  <span className="text-[11px] opacity-90 break-keep">
+                                    {exp.meaning}
+                                  </span>
+                                </div>
+
+                                {/* 우측 스피커 아이콘 */}
+                                <span className={`material-symbols-outlined text-[13px] shrink-0 ${
+                                  speakingMsgId === `ke-${i}-${msg.id}` ? 'animate-pulse' : 'opacity-70'
+                                }`}>
+                                  {speakingMsgId === `ke-${i}-${msg.id}` ? 'graphic_eq' : 'volume_up'}
                                 </span>
-                              </span>
+                              </div>
                             ))}
                           </div>
                         )}
