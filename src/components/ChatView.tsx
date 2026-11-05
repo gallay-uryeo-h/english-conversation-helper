@@ -122,7 +122,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     return () => { isCancelled = true; };
   }, [messages.length, activeThread.partnerName]);
 
-  // 한글 입력 디바운스 (400ms 시차를 두어 API 과도 호출 및 Rate Limit 방지)
+  // 한글 또는 영어 입력 디바운스 (400ms 시차를 두어 API 과도 호출 및 Rate Limit 방지)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -132,8 +132,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       clearTimeout(debounceTimerRef.current);
     }
 
-    const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(val);
-    if (!hasKorean || val.trim().length < 2) {
+    const trimmed = val.trim();
+    if (trimmed.length < 2) {
       setRecommendations([]);
       setIsDebouncing(false);
       return;
@@ -433,11 +433,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {isDebouncing && (
         <div className="mx-3 mb-1 px-3 py-1 bg-[#e8f0fe] text-[#1a73e8] text-[11px] rounded-lg flex items-center gap-1.5 animate-pulse shrink-0">
           <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
-          <span>Gemini 3.5 영작 추천 생성 중...</span>
+          <span>Gemini 3.5 표현 추천 중...</span>
         </div>
       )}
 
-      {/* 4. 실시간 한글 입력 영작 추천 카드 (심플 & 미니멀) */}
+      {/* 4. 실시간 표현 추천 카드 (심플 & 미니멀) */}
       {recommendations.length > 0 && (
         <div className="mx-3 mb-2 p-1.5 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150 shrink-0">
           {recommendations.map((rec) => (

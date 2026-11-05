@@ -125,28 +125,31 @@ export const getGroqClient = (apiKey?: string): Groq | null => {
 };
 
 export const aiService = {
-  // 한글 입력에 따른 실시간 영어 변환 추천 카드 생성 (Gemini -> Groq -> 로컬 패턴, Polite -> Natural -> Casual 순서)
-  async generateRecommendationsAsync(koreanInput: string): Promise<RecommendationCard[]> {
-    const trimmed = koreanInput.trim();
+  // 한글 또는 영어 입력에 따른 실시간 표현 추천 카드 생성 (Gemini -> Groq -> 로컬, Polite -> Natural -> Casual 순서)
+  async generateRecommendationsAsync(userInput: string): Promise<RecommendationCard[]> {
+    const trimmed = userInput.trim();
     if (!trimmed) return [];
 
     // 1. Gemini API 우선 시도 (gemini-3.5-flash-lite 기본 모델)
     const geminiKey = getGeminiApiKey();
     if (geminiKey) {
       try {
-        const prompt = `You are a real-time English conversation assistant. 
-Translate and adapt the following Korean thought/draft into 3 distinct English conversation options strictly in this order:
+        const prompt = `You are an expert English conversation coach and expression assistant.
+The user input in the chat box is: "${trimmed}" (this may be a Korean thought/draft OR an English draft/phrase).
+
+- If the input is in Korean: translate and adapt it into 3 natural, conversational English options.
+- If the input is in English: polish, enhance, and offer 3 natural, conversational English variations/alternatives.
+
+Strictly generate 3 distinct options in this order:
 1. Polite: Professional, courteous tone
 2. Natural: Common, idiomatic spoken English
 3. Casual: Friendly, relaxed tone for friends
 
-Korean input: "${trimmed}"
-
 Respond ONLY with a valid JSON object with key "options" containing an array of objects with keys:
 - tone ("Polite" | "Natural" | "Casual")
-- english (string)
+- english (string - the natural conversational English option)
 - koreanMeaning (brief 1-line Korean explanation of the tone/nuance)
-- grammarTip (optional 1-line vocabulary or idiom tip)`;
+- grammarTip (optional 1-line vocabulary, idiom, or phrasing tip)`;
 
         const res = await fetch(`${GEMINI_API_BASE}/${GEMINI_DEFAULT_MODEL}:generateContent?key=${geminiKey}`, {
           method: 'POST',
@@ -186,12 +189,15 @@ Respond ONLY with a valid JSON object with key "options" containing an array of 
       try {
         const groq = getGroqClient(groqKey);
         if (groq) {
-          const prompt = `Translate and adapt this Korean sentence/thought into 3 distinct English conversation options in this order:
+          const prompt = `You are an expert English conversation coach.
+User input: "${trimmed}" (may be Korean draft or English draft).
+- If Korean: translate into 3 conversational English options.
+- If English: polish and offer 3 natural conversational variations.
+
+Strictly generate 3 distinct options in this order:
 1. Polite: Courteous tone
 2. Natural: Common, idiomatic spoken English
 3. Casual: Friendly, relaxed tone for friends
-
-Korean input: "${trimmed}"
 
 Respond ONLY with a JSON object format:
 {
