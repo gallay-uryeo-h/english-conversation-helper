@@ -454,10 +454,44 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                             </span>
                           </div>
 
-                          {/* 실제 대화 영문 문장 (키워드 하이라이트) */}
-                          <p className="text-[13px] text-[#1f1f1f] leading-relaxed select-text">
-                            "{renderHighlightedSentence(ctx.englishSentence, item.phrase)}"
-                          </p>
+                          {/* 실제 대화 영문 문장 (키워드 하이라이트) & 문장 옆 스피커 아이콘 및 복사 버튼 */}
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-[13px] text-[#1f1f1f] leading-relaxed select-text flex-1">
+                              "{renderHighlightedSentence(ctx.englishSentence, item.phrase)}"
+                            </p>
+
+                            <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                              {/* 문장 발음 듣기 스피커 아이콘 */}
+                              <button
+                                onClick={() => handlePlaySpeech(ctx.msgId, ctx.englishSentence)}
+                                className={`p-1 rounded-full transition-all active:scale-90 ${
+                                  speakingId === ctx.msgId 
+                                    ? 'text-[#1a73e8] animate-pulse' 
+                                    : 'text-[#747775] hover:text-[#1a73e8]'
+                                }`}
+                                title="문장 듣기"
+                              >
+                                <span className="material-symbols-outlined text-[18px] leading-none">
+                                  {speakingId === ctx.msgId ? 'graphic_eq' : 'volume_up'}
+                                </span>
+                              </button>
+
+                              {/* 바로 옆 복사 버튼 */}
+                              <button
+                                onClick={() => handleCopyText(ctx.msgId, ctx.englishSentence)}
+                                className={`p-1 rounded-full transition-all active:scale-90 ${
+                                  copiedId === ctx.msgId 
+                                    ? 'text-[#188038]' 
+                                    : 'text-[#747775] hover:text-[#1a73e8]'
+                                }`}
+                                title={copiedId === ctx.msgId ? "복사 완료" : "문장 복사"}
+                              >
+                                <span className="material-symbols-outlined text-[17px] leading-none">
+                                  {copiedId === ctx.msgId ? 'done' : 'content_copy'}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
 
                           {/* 해석보기 */}
                           {ctx.koreanTranslation && (
@@ -466,37 +500,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({
                               <span className="leading-snug">{ctx.koreanTranslation}</span>
                             </div>
                           )}
-
-                          {/* 문장 음성 듣기 & 복사 버튼 */}
-                          <div className="flex items-center justify-end gap-1.5 pt-1">
-                            <button
-                              onClick={() => handlePlaySpeech(ctx.msgId, ctx.englishSentence)}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition-all active:scale-95 ${
-                                speakingId === ctx.msgId 
-                                  ? 'bg-[#1a73e8] text-white animate-pulse' 
-                                  : 'bg-[#f1f3f4] text-[#444746] hover:bg-[#e8f0fe] hover:text-[#1a73e8]'
-                              }`}
-                              title="문장 전체 발음 듣기"
-                            >
-                              <span className="material-symbols-outlined text-[13px]">
-                                {speakingId === ctx.msgId ? 'graphic_eq' : 'volume_up'}
-                              </span>
-                              <span>문장 듣기</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleCopyText(ctx.msgId, ctx.englishSentence)}
-                              className="p-1 rounded-md text-[#747775] hover:text-[#1f1f1f] hover:bg-black/5 transition-colors"
-                              title="문장 복사"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">
-                                {copiedId === ctx.msgId ? 'done' : 'content_copy'}
-                              </span>
-                            </button>
-                            {copiedId === ctx.msgId && (
-                              <span className="text-[10px] text-[#188038] font-medium">복사됨!</span>
-                            )}
-                          </div>
                         </div>
                       ))}
                     </div>
