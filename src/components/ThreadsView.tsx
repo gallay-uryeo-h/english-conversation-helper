@@ -261,9 +261,17 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                           <span className="text-[#fbbc04] text-[13px]">★</span>
                         )}
                       </div>
-                      <span className="text-[11px] text-[#5f6368] shrink-0 font-mono">
-                        {formatTime(singleThread.updatedAt)}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[11px] text-[#5f6368] font-mono">
+                          {formatTime(singleThread.updatedAt)}
+                        </span>
+                        {/* 카카오톡 스타일 안 읽은 대화 개수 뱃지 */}
+                        {typeof singleThread.unreadCount === 'number' && singleThread.unreadCount > 0 && (
+                          <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#b3261e] text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
+                            {singleThread.unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* 최신 메시지 스니펫 */}
@@ -338,9 +346,20 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                           </span>
                         </span>
                       </div>
-                      <span className="text-[11px] text-[#5f6368] shrink-0 font-mono">
-                        {formatTime(group.latestThread.updatedAt)}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[11px] text-[#5f6368] font-mono">
+                          {formatTime(group.latestThread.updatedAt)}
+                        </span>
+                        {/* 그룹 내 안 읽은 대화 총합 뱃지 */}
+                        {(() => {
+                          const groupUnread = group.threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+                          return groupUnread > 0 ? (
+                            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#b3261e] text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
+                              {groupUnread}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
                     </div>
 
                     {/* 최신 메시지 미리보기 */}
@@ -413,6 +432,11 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
                                 <span className="text-[11px] text-[#5f6368] font-mono shrink-0">
                                   {formatTime(thread.updatedAt)}
                                 </span>
+                                {typeof thread.unreadCount === 'number' && thread.unreadCount > 0 && (
+                                  <span className="min-w-[17px] h-[17px] px-1 rounded-full bg-[#b3261e] text-white text-[9px] font-bold flex items-center justify-center">
+                                    {thread.unreadCount}
+                                  </span>
+                                )}
                               </div>
                               <p className="text-[13px] text-[#1f1f1f] truncate leading-snug">
                                 {thread.lastSender === 'user' ? (

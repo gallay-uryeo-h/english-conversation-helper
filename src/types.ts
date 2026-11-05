@@ -9,6 +9,8 @@ export interface Thread {
   lastSender?: 'user' | 'assistant';
   title?: string;
   partnerRole?: string;
+  partnerEmail?: string;
+  isAi?: boolean;
   unreadCount?: number;
   isFavorite?: boolean;
   category?: string;
@@ -39,6 +41,8 @@ export interface MessageTranslation {
 export interface Message {
   id: string;
   sender: 'user' | 'assistant';
+  senderEmail?: string;
+  senderName?: string;
   text: string;
   koreanDraft?: string;
   timestamp: number;

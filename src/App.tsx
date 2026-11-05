@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MainTab, Thread, Message, MessageTranslation, SavedExpression, SavedScript, RecommendationCard, Friend, GroupMember } from './types';
-import { storageService, DEFAULT_FRIENDS } from './services/storageService';
+import { storageService, DEFAULT_FRIENDS, getSharedThreadId } from './services/storageService';
 import { aiService } from './services/aiService';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -44,8 +44,10 @@ const MainApp: React.FC = () => {
       if (!user) return;
       try {
         setLoading(true);
-        // 로그인한 사용자 UID로 데이터 스토리지 격리
+        // 로그인한 사용자 UID 및 이메일로 데이터 스토리지 설정
         storageService.setUserId(user.uid);
+        storageService.setUserEmail(user.email);
+        storageService.setUserName(user.displayName);
 
         // 0. 사용자 프로필 그룹 디렉토리 동기화 및 그룹 멤버 목록 로드
         await storageService.recordUserProfile(user);
@@ -86,6 +88,29 @@ const MainApp: React.FC = () => {
     initData();
   }, [user?.uid, allowedEmails]);
 
+  // 실시간 스레드 목록 구독 (친구로부터 온 새 메시지 및 안 읽은 뱃지 실시간 동기화)
+  useEffect(() => {
+    if (!user?.email) return;
+    const unsubscribe = storageService.subscribeToThreads(user.email, (liveThreads) => {
+      setThreads(prev => {
+        const map = new Map<string, Thread>();
+        prev.forEach(t => map.set(t.id, t));
+        liveThreads.forEach(t => map.set(t.id, t));
+        return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      });
+    });
+    return () => unsubscribe();
+  }, [user?.email]);
+
+  // 현재 활성 대화방 실시간 메시지 구독 (친구가 보낸 메시지가 0ms로 화면에 즉시 뜸)
+  useEffect(() => {
+    if (!activeThread?.id || !user?.email || !activeThread.id.startsWith('dm_')) return;
+    const unsubscribe = storageService.subscribeToMessages(activeThread.id, user.email, (liveMsgs) => {
+      setMessages(liveMsgs);
+    });
+    return () => unsubscribe();
+  }, [activeThread?.id, user?.email]);
+
   // 대화 화면 진입 헬퍼 (히스토리 스택에 push하여 뒤로가기 지원)
   const openChatScreen = (thread: Thread, msgs: Message[]) => {
     if (currentTab !== 'chat') {
@@ -106,14 +131,45 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // 친구 카드를 눌러 1:1 대화 시작 (한 친구와 멀티플 대화방 지원)
+  // 친구 카드를 눌러 1:1 대화 시작 (실제 친구는 공유 DM 스레드, AI는 개인 연습 스레드)
   const handleStartChatWithFriend = async (friend: Friend, forceNew = false) => {
-    // 1. forceNew가 false이고 이미 해당 친구와의 대화방이 있으면 최근 방 열기
+    // A. 실제 친구와의 1:1 대화 (양방향 공유 DM 스레드)
+    if (!friend.isAi && friend.email && user?.email) {
+      const sharedThreadId = getSharedThreadId(user.email, friend.email);
+      let targetThread = threads.find(t => t.id === sharedThreadId);
+
+      if (!targetThread) {
+        targetThread = {
+          id: sharedThreadId,
+          partnerName: friend.name,
+          partnerEmail: friend.email,
+          avatarBg: friend.avatarBg,
+          avatarText: friend.avatarText,
+          lastMessage: '대화를 시작해보세요.',
+          messageCount: 0,
+          updatedAt: Date.now(),
+          unreadCount: 0,
+          isAi: false
+        };
+        setThreads(prev => [targetThread!, ...prev.filter(t => t.id !== sharedThreadId)]);
+        await storageService.saveThread(targetThread);
+      } else {
+        // 이미 방이 있으면 읽음 처리 후 입장
+        targetThread = { ...targetThread, unreadCount: 0 };
+        setThreads(prev => prev.map(t => t.id === sharedThreadId ? targetThread! : t));
+        await storageService.markThreadAsRead(sharedThreadId);
+      }
+
+      let msgs = await storageService.getMessages(sharedThreadId);
+      openChatScreen(targetThread, msgs);
+      return;
+    }
+
+    // B. AI 친구와의 대화
     if (!forceNew) {
-      const existing = threads.find(t => t.partnerName === friend.name);
+      const existing = threads.find(t => t.partnerName === friend.name && (t.isAi || !t.partnerEmail));
       if (existing) {
         let msgs = await storageService.getMessages(existing.id);
-        // 레거시 또는 이전 자동 생성 첫 인사만 남아있는 경우 빈 방으로 시작
         if (msgs.length === 1 && (msgs[0].id.startsWith('msg-greeting') || msgs[0].text.includes('Ready to practice') || msgs[0].text.includes("Let's chat in English"))) {
           msgs = [];
         }
@@ -122,7 +178,6 @@ const MainApp: React.FC = () => {
       }
     }
 
-    // 2. 새 대화방 개설 (첫 문장을 미리 주지 않고 유저가 직접 입력하여 시작)
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
       partnerName: friend.name,
@@ -130,7 +185,9 @@ const MainApp: React.FC = () => {
       avatarText: friend.avatarText,
       lastMessage: '대화를 시작해보세요.',
       messageCount: 0,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      unreadCount: 0,
+      isAi: true
     };
 
     const updated = [newThread, ...threads];
@@ -152,13 +209,18 @@ const MainApp: React.FC = () => {
     setFriends((prev) => prev.filter(f => f.id !== friendId));
   };
 
-  // 활성 스레드 선택하여 대화방 입장
+  // 활성 스레드 선택하여 대화방 입장 (카카오톡 스타일 읽음 처리)
   const handleSelectThread = async (thread: Thread) => {
+    if (thread.unreadCount && thread.unreadCount > 0) {
+      await storageService.markThreadAsRead(thread.id);
+      setThreads(prev => prev.map(t => t.id === thread.id ? { ...t, unreadCount: 0 } : t));
+    }
+
     let msgs = await storageService.getMessages(thread.id);
     if (msgs.length === 1 && (msgs[0].id.startsWith('msg-greeting') || msgs[0].text.includes('Ready to practice') || msgs[0].text.includes("Let's chat in English"))) {
       msgs = [];
     }
-    openChatScreen(thread, msgs);
+    openChatScreen({ ...thread, unreadCount: 0 }, msgs);
   };
 
   // 대화방 삭제
@@ -199,7 +261,7 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // 메시지 전송 및 AI 응답 처리 (0ms 즉각 로컬 영구 보존 + 백그라운드 동기화)
+  // 메시지 전송 및 응답 처리 (실제 친구는 공유 저장 및 뱃지 전달, AI는 자동 응답)
   const handleSendMessage = async (
     text: string, 
     koreanDraft?: string, 
@@ -209,12 +271,15 @@ const MainApp: React.FC = () => {
     if (!activeThread) return;
     const currentThreadId = activeThread.id;
     const currentPartnerName = activeThread.partnerName;
+    const isFriendChat = !activeThread.isAi && Boolean(activeThread.partnerEmail);
 
     // 1. 유저 메시지 화면에 0ms 즉시 추가
     const userMsgId = `msg-${Date.now()}`;
     const userMsg: Message = {
       id: userMsgId,
       sender: 'user',
+      senderEmail: user?.email || undefined,
+      senderName: user?.displayName || undefined,
       text,
       timestamp: Date.now(),
       recommendations,
@@ -230,24 +295,30 @@ const MainApp: React.FC = () => {
       lastMessage: userMsg.text,
       lastSender: 'user',
       messageCount: (t.messageCount || 0) + 1,
-      updatedAt: userMsg.timestamp
+      updatedAt: userMsg.timestamp,
+      unreadCount: 0
     } : t));
 
-    // 로컬스토리지 0ms 즉각 저장 (사용자가 즉시 방을 나가도 절대 유실되지 않음)
-    await storageService.saveMessage(currentThreadId, userMsg);
+    // 로컬스토리지 및 Firestore 저장 (실제 친구인 경우 상대방 이메일 전달하여 상대방 대화방 뱃지 +1)
+    await storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
 
     // 내 발화도 AI 발화와 동일하게 정식 한국어 해석과 핵심 어휘만 깔끔하게 비동기 생성 및 보존
     if (!precomputedTranslation) {
       aiService.translateMessageAsync(text).then((transData) => {
         if (transData && (transData.translation || transData.keyExpressions.length > 0)) {
           userMsg.translation = transData;
-          storageService.saveMessage(currentThreadId, userMsg);
+          storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
           setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, translation: transData } : m));
         }
       }).catch(e => console.warn("User message translation error:", e));
     }
 
-    // 2. AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
+    // 2. [실제 친구와의 대화인 경우] AI 자동 응답을 끄고 종료! (진짜 친구 간 대화 모드)
+    if (isFriendChat) {
+      return;
+    }
+
+    // 3. [AI 친구인 경우] AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
     try {
       const replyData = await aiService.generateAssistantReplyAsync(
         currentPartnerName, 
@@ -359,11 +430,12 @@ const MainApp: React.FC = () => {
           )}
         </main>
 
-        {/* 하단 내비게이션 바 (채팅 중일 때는 대화에 집중하도록 숨김) */}
+        {/* 하단 내비게이션 바 (카카오톡 스타일 안 읽은 총 개수 뱃지 표시, 채팅 중일 때는 숨김) */}
         {currentTab !== 'chat' && (
           <BottomNav 
             currentTab={currentTab} 
             onSelectTab={(tab) => setCurrentTab(tab)}
+            unreadCount={threads.reduce((acc, t) => acc + (t.unreadCount || 0), 0)}
           />
         )}
       </div>

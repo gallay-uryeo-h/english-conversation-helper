@@ -4,6 +4,7 @@ import {
   doc, 
   getDoc, 
   setDoc,
+  onSnapshot,
   User
 } from '../firebase';
 import { Thread, Message, SavedExpression, SavedScript, Friend, GroupMember, VocabularyCorpusItem, VocabularyContext } from '../types';
@@ -21,9 +22,24 @@ export const DEFAULT_AI_FRIEND: Friend = {
 export const DEFAULT_FRIENDS: Friend[] = [DEFAULT_AI_FRIEND];
 
 let currentUserId: string | null = null;
+let currentUserEmail: string | null = null;
+let currentUserName: string | null = null;
+
+export const cleanEmailKey = (email: string) => {
+  return (email || '').trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+};
+
+export const getSharedThreadId = (emailA: string, emailB: string) => {
+  const sorted = [emailA.trim().toLowerCase(), emailB.trim().toLowerCase()].sort();
+  return `dm_${cleanEmailKey(sorted[0])}__${cleanEmailKey(sorted[1])}`;
+};
 
 const getDocId = (baseName: string) => {
   return currentUserId ? `${baseName}_${currentUserId}` : baseName;
+};
+
+const getEmailDocId = (baseName: string) => {
+  return currentUserEmail ? `${baseName}_${cleanEmailKey(currentUserEmail)}` : getDocId(baseName);
 };
 
 const getLocalKey = (baseKey: string) => {
@@ -43,13 +59,32 @@ export const generateAvatarInfo = (email: string, name?: string) => {
 };
 
 export const storageService = {
-  // 현재 로그인한 사용자 ID 설정 (사용자별 격리 보장)
+  // 현재 로그인한 사용자 ID 및 이메일 설정 (사용자별 격리 보장)
   setUserId(uid: string | null) {
     currentUserId = uid;
   },
 
+  setUserEmail(email: string | null) {
+    currentUserEmail = email ? email.trim().toLowerCase() : null;
+  },
+
+  setUserName(name: string | null) {
+    currentUserName = name;
+  },
+
+  getUserEmail(): string | null {
+    return currentUserEmail;
+  },
+
+  getUserName(): string | null {
+    return currentUserName;
+  },
+
   // 사용자 로그인 시 그룹 디렉토리에 내 프로필 정보 등록/갱신
   async recordUserProfile(user: User): Promise<void> {
+    currentUserEmail = (user.email || '').trim().toLowerCase();
+    currentUserName = user.displayName || user.email?.split('@')[0] || '사용자';
+
     try {
       const docRef = doc(db, ROOT_COLLECTION_NAME, "group_directory");
       const snap = await getDoc(docRef);
@@ -58,9 +93,9 @@ export const storageService = {
         directory = snap.data().members;
       }
       directory[user.uid] = {
-        name: user.displayName || user.email?.split('@')[0] || '사용자',
+        name: currentUserName,
         photoURL: user.photoURL || undefined,
-        email: (user.email || '').toLowerCase()
+        email: currentUserEmail
       };
       await setDoc(docRef, { members: directory });
     } catch (e) {
@@ -203,63 +238,159 @@ export const storageService = {
     localStorage.setItem(localKey, JSON.stringify(filtered));
   },
 
-  // 스레드(대화방) 목록 가져오기
+  // 스레드(대화방) 목록 가져오기 (이메일 기반 공유 스레드 및 UID 스레드 통합)
   async getThreads(): Promise<Thread[]> {
     const docId = getDocId("threads_data");
+    const emailDocId = getEmailDocId("threads_email");
     const localKey = getLocalKey('app_threads');
 
+    // 1. 로컬 캐시 우선 확보
+    let localThreads: Thread[] = [];
     try {
+      const local = localStorage.getItem(localKey);
+      if (local) localThreads = JSON.parse(local);
+    } catch (e) {}
+
+    try {
+      const threadMap = new Map<string, Thread>();
+      localThreads.forEach(t => threadMap.set(t.id, t));
+
+      // 2. 이메일 기반 스레드 문서 조회 (친구로부터 받은 DM 포함)
+      if (currentUserEmail) {
+        const emailRef = doc(db, ROOT_COLLECTION_NAME, emailDocId);
+        const emailSnap = await getDoc(emailRef);
+        if (emailSnap.exists() && emailSnap.data().items) {
+          (emailSnap.data().items as Thread[]).forEach(t => threadMap.set(t.id, t));
+        }
+      }
+
+      // 3. 기존 UID 기반 스레드 문서 조회
       const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(threadsDocRef);
       if (snap.exists() && snap.data().items) {
-        return snap.data().items as Thread[];
+        (snap.data().items as Thread[]).forEach(t => {
+          if (!threadMap.has(t.id)) {
+            threadMap.set(t.id, t);
+          }
+        });
       }
-      await setDoc(threadsDocRef, { items: [] });
-      return [];
+
+      const merged = Array.from(threadMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      localStorage.setItem(localKey, JSON.stringify(merged));
+      return merged;
     } catch (e) {
-      const local = localStorage.getItem(localKey);
-      if (local) return JSON.parse(local);
-      return [];
+      console.warn("getThreads error, fallback to local:", e);
+      return localThreads;
+    }
+  },
+
+  // 스레드 목록 실시간 구독 (친구가 메시지를 보냈을 때 즉시 카카오톡 뱃지 & 목록 자동 갱신)
+  subscribeToThreads(userEmail: string, callback: (threads: Thread[]) => void): () => void {
+    if (!userEmail) return () => {};
+    const cleanEmail = cleanEmailKey(userEmail);
+    const docRef = doc(db, ROOT_COLLECTION_NAME, `threads_email_${cleanEmail}`);
+
+    return onSnapshot(docRef, (snap) => {
+      if (snap.exists() && snap.data().items) {
+        const items = (snap.data().items as Thread[]).sort((a, b) => b.updatedAt - a.updatedAt);
+        callback(items);
+      }
+    }, (err) => {
+      console.warn("subscribeToThreads error:", err);
+    });
+  },
+
+  // 특정 스레드 읽음 처리 (카카오톡 뱃지 0으로 초기화)
+  async markThreadAsRead(threadId: string): Promise<void> {
+    const localKey = getLocalKey('app_threads');
+    try {
+      const local: Thread[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const target = local.find(t => t.id === threadId);
+      if (target && target.unreadCount) {
+        target.unreadCount = 0;
+        localStorage.setItem(localKey, JSON.stringify(local));
+      }
+    } catch (e) {}
+
+    if (currentUserEmail) {
+      const cleanEmail = cleanEmailKey(currentUserEmail);
+      const docRef = doc(db, ROOT_COLLECTION_NAME, `threads_email_${cleanEmail}`);
+      try {
+        const snap = await getDoc(docRef);
+        if (snap.exists() && snap.data().items) {
+          const items = snap.data().items as Thread[];
+          const target = items.find(t => t.id === threadId);
+          if (target && target.unreadCount) {
+            target.unreadCount = 0;
+            await setDoc(docRef, { items });
+          }
+        }
+      } catch (e) {
+        console.warn("markThreadAsRead error:", e);
+      }
     }
   },
 
   // 스레드 저장
   async saveThread(thread: Thread): Promise<void> {
     const threadsDocId = getDocId("threads_data");
+    const emailDocId = getEmailDocId("threads_email");
     const localKey = getLocalKey('app_threads');
 
+    // 로컬 스토리지 즉시 반영
+    let local: Thread[] = [];
     try {
+      local = JSON.parse(localStorage.getItem(localKey) || '[]');
+    } catch (e) {}
+
+    const existingIdx = local.findIndex(t => t.id === thread.id);
+    if (existingIdx >= 0) {
+      local[existingIdx] = thread;
+    } else {
+      local.unshift(thread);
+    }
+    localStorage.setItem(localKey, JSON.stringify(local));
+
+    // Firestore 동기화
+    try {
+      if (currentUserEmail) {
+        const emailDocRef = doc(db, ROOT_COLLECTION_NAME, emailDocId);
+        const emailSnap = await getDoc(emailDocRef);
+        let items: Thread[] = (emailSnap.exists() && emailSnap.data().items) ? emailSnap.data().items : [];
+        const idx = items.findIndex(t => t.id === thread.id);
+        if (idx >= 0) items[idx] = thread;
+        else items.unshift(thread);
+        await setDoc(emailDocRef, { items });
+      }
+
       const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
       const snap = await getDoc(threadsDocRef);
-      let items: Thread[] = [];
-      if (snap.exists() && snap.data().items) {
-        items = snap.data().items as Thread[];
-      }
-      const existingIdx = items.findIndex(t => t.id === thread.id);
-      if (existingIdx >= 0) {
-        items[existingIdx] = thread;
-      } else {
-        items.unshift(thread);
-      }
+      let items: Thread[] = (snap.exists() && snap.data().items) ? snap.data().items : [];
+      const idx = items.findIndex(t => t.id === thread.id);
+      if (idx >= 0) items[idx] = thread;
+      else items.unshift(thread);
       await setDoc(threadsDocRef, { items });
     } catch (e) {
-      const local: Thread[] = JSON.parse(localStorage.getItem(localKey) || '[]');
-      const existingIdx = local.findIndex(t => t.id === thread.id);
-      if (existingIdx >= 0) {
-        local[existingIdx] = thread;
-      } else {
-        local.unshift(thread);
-      }
-      localStorage.setItem(localKey, JSON.stringify(local));
+      console.warn("saveThread remote error:", e);
     }
   },
 
   // 스레드 삭제
   async deleteThread(threadId: string): Promise<void> {
     const threadsDocId = getDocId("threads_data");
+    const emailDocId = getEmailDocId("threads_email");
     const localKey = getLocalKey('app_threads');
 
     try {
+      if (currentUserEmail) {
+        const emailDocRef = doc(db, ROOT_COLLECTION_NAME, emailDocId);
+        const emailSnap = await getDoc(emailDocRef);
+        if (emailSnap.exists() && emailSnap.data().items) {
+          const items = (emailSnap.data().items as Thread[]).filter(t => t.id !== threadId);
+          await setDoc(emailDocRef, { items });
+        }
+      }
+
       const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
       const snap = await getDoc(threadsDocRef);
       if (snap.exists() && snap.data().items) {
@@ -267,18 +398,27 @@ export const storageService = {
         await setDoc(threadsDocRef, { items });
       }
     } catch (e) {
+      console.warn("deleteThread remote error:", e);
+    }
+
+    try {
       const local: Thread[] = JSON.parse(localStorage.getItem(localKey) || '[]');
       const filtered = local.filter(t => t.id !== threadId);
       localStorage.setItem(localKey, JSON.stringify(filtered));
-    }
+    } catch (e) {}
   },
 
   // 전체 스레드 초기화/삭제
   async clearAllThreads(): Promise<void> {
     const threadsDocId = getDocId("threads_data");
+    const emailDocId = getEmailDocId("threads_email");
     const localKey = getLocalKey('app_threads');
 
     try {
+      if (currentUserEmail) {
+        const emailDocRef = doc(db, ROOT_COLLECTION_NAME, emailDocId);
+        await setDoc(emailDocRef, { items: [] });
+      }
       const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
       await setDoc(threadsDocRef, { items: [] });
     } catch (e) {
@@ -287,9 +427,10 @@ export const storageService = {
     localStorage.removeItem(localKey);
   },
 
-  // 특정 스레드의 메시지 목록 가져오기 (오프라인 우선 + 원격 병합)
+  // 특정 스레드의 메시지 목록 가져오기 (DM 공통 문서 또는 개인 문서 통합)
   async getMessages(threadId: string): Promise<Message[]> {
-    const docId = getDocId(`messages_${threadId}`);
+    const isDm = threadId.startsWith('dm_');
+    const docId = isDm ? `shared_messages_${threadId}` : getDocId(`messages_${threadId}`);
     const localKey = getLocalKey(`app_messages_${threadId}`);
 
     // 1. 로컬에 저장된 메시지 즉시 확보 (0ms)
@@ -305,7 +446,6 @@ export const storageService = {
       const snap = await getDoc(msgDocRef);
       if (snap.exists() && snap.data().items) {
         const remoteMsgs = snap.data().items as Message[];
-        // ID 기준으로 로컬과 원격 메시지 병합 (중복 방지 및 누락 방지)
         const msgMap = new Map<string, Message>();
         remoteMsgs.forEach(m => msgMap.set(m.id, m));
         localMsgs.forEach(m => {
@@ -313,11 +453,22 @@ export const storageService = {
             msgMap.set(m.id, m);
           }
         });
+
         const merged = Array.from(msgMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+        
+        // DM인 경우 내가 보낸 건 'user', 친구가 보낸 건 'assistant'로 자동 매핑
+        const normalized = merged.map(m => {
+          if (isDm && m.senderEmail && currentUserEmail) {
+            const isMe = m.senderEmail.toLowerCase() === currentUserEmail.toLowerCase();
+            return { ...m, sender: (isMe ? 'user' : 'assistant') as ('user' | 'assistant') };
+          }
+          return m;
+        });
+
         try {
-          localStorage.setItem(localKey, JSON.stringify(merged));
+          localStorage.setItem(localKey, JSON.stringify(normalized));
         } catch (e) {}
-        return merged;
+        return normalized;
       }
     } catch (e) {
       console.warn("getMessages remote error, falling back to local:", e);
@@ -326,32 +477,57 @@ export const storageService = {
     return localMsgs;
   },
 
-  // 메시지 전송 및 저장 (0ms 로컬 즉시 영구 저장 + Firestore 백그라운드 동기화)
-  async saveMessage(threadId: string, message: Message): Promise<void> {
-    const docId = getDocId(`messages_${threadId}`);
-    const threadsDocId = getDocId("threads_data");
+  // 실시간 메시지 구독 (내가 열고 있는 DM 대화방에 친구가 메시지를 쏘면 즉시 화면에 노출)
+  subscribeToMessages(threadId: string, myEmail: string, callback: (msgs: Message[]) => void): () => void {
+    if (!threadId.startsWith('dm_')) return () => {};
+
+    const docRef = doc(db, ROOT_COLLECTION_NAME, `shared_messages_${threadId}`);
+    return onSnapshot(docRef, (snap) => {
+      if (snap.exists() && snap.data().items) {
+        const rawMsgs = snap.data().items as Message[];
+        const sorted = rawMsgs.sort((a, b) => a.timestamp - b.timestamp);
+        const mapped = sorted.map(m => {
+          if (m.senderEmail && myEmail) {
+            const isMe = m.senderEmail.toLowerCase() === myEmail.toLowerCase();
+            return { ...m, sender: (isMe ? 'user' : 'assistant') as ('user' | 'assistant') };
+          }
+          return m;
+        });
+        callback(mapped);
+      }
+    }, (err) => {
+      console.warn("subscribeToMessages error:", err);
+    });
+  },
+
+  // 메시지 전송 및 저장 (친구 DM 공유 저장 + 카카오톡 스타일 상대방 뱃지 갱신)
+  async saveMessage(threadId: string, message: Message, partnerEmail?: string): Promise<void> {
+    const isDm = threadId.startsWith('dm_');
+    const docId = isDm ? `shared_messages_${threadId}` : getDocId(`messages_${threadId}`);
     const localKey = getLocalKey(`app_messages_${threadId}`);
     const localThreadsKey = getLocalKey('app_threads');
 
+    // 발신자 정보 기록
+    if (!message.senderEmail && currentUserEmail) {
+      message.senderEmail = currentUserEmail;
+      message.senderName = currentUserName || undefined;
+    }
+
     // 1. [0ms 동기식 보장] 브라우저 로컬 스토리지에 즉시 무조건 먼저 저장!
-    // 사용자가 전송 누르고 1ms 만에 화면을 나가더라도 절대 사라지지 않음
     let currentLocalMsgs: Message[] = [];
     try {
       const raw = localStorage.getItem(localKey);
       if (raw) currentLocalMsgs = JSON.parse(raw);
     } catch (e) {}
     
-    // 이미 동일 id가 없으면 추가
     if (!currentLocalMsgs.some(m => m.id === message.id)) {
       currentLocalMsgs.push(message);
       try {
         localStorage.setItem(localKey, JSON.stringify(currentLocalMsgs));
-      } catch (e) {
-        console.warn("localStorage setItem error:", e);
-      }
+      } catch (e) {}
     }
 
-    // 로컬 스레드 목록 최신 정보 업데이트
+    // 내 로컬 스레드 목록 갱신
     try {
       const rawThreads = localStorage.getItem(localThreadsKey);
       if (rawThreads) {
@@ -359,43 +535,77 @@ export const storageService = {
         const target = localThreads.find(t => t.id === threadId);
         if (target) {
           target.lastMessage = message.text;
-          target.lastSender = message.sender;
-          target.messageCount = currentLocalMsgs.length;
+          target.lastSender = 'user';
           target.updatedAt = message.timestamp;
+          target.unreadCount = 0;
           localStorage.setItem(localThreadsKey, JSON.stringify(localThreads));
         }
       }
     } catch (e) {}
 
-    // 2. [원격 비동기 백업] Firestore에 동기화
+    // 2. Firestore 동기화
     try {
+      // 2-1. 메시지 저장
       const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
       let items: Message[] = [];
       if (snap.exists() && snap.data().items) {
-        items = snap.data().items;
+        items = snap.data().items as Message[];
       }
       if (!items.some(m => m.id === message.id)) {
         items.push(message);
+        await setDoc(msgDocRef, { items });
       }
-      await setDoc(msgDocRef, { items });
 
-      // 스레드 최신 메시지 업데이트
-      const threadsDocRef = doc(db, ROOT_COLLECTION_NAME, threadsDocId);
-      const threadSnap = await getDoc(threadsDocRef);
-      if (threadSnap.exists() && threadSnap.data().items) {
-        const threads = threadSnap.data().items as Thread[];
-        const target = threads.find(t => t.id === threadId);
-        if (target) {
-          target.lastMessage = message.text;
-          target.lastSender = message.sender;
-          target.messageCount = items.length;
-          target.updatedAt = message.timestamp;
-          await setDoc(threadsDocRef, { items: threads });
+      // 2-2. 내 스레드 목록 업데이트
+      if (currentUserEmail) {
+        const myEmailRef = doc(db, ROOT_COLLECTION_NAME, getEmailDocId("threads_email"));
+        const myEmailSnap = await getDoc(myEmailRef);
+        let myThreads: Thread[] = (myEmailSnap.exists() && myEmailSnap.data().items) ? myEmailSnap.data().items : [];
+        const myIdx = myThreads.findIndex(t => t.id === threadId);
+        if (myIdx >= 0) {
+          myThreads[myIdx].lastMessage = message.text;
+          myThreads[myIdx].lastSender = 'user';
+          myThreads[myIdx].updatedAt = message.timestamp;
+          myThreads[myIdx].unreadCount = 0;
         }
+        await setDoc(myEmailRef, { items: myThreads });
+      }
+
+      // 2-3. [친구와의 DM인 경우] 상대방 친구의 대화 목록에 방 생성 및 unreadCount +1 갱신 (카카오톡 뱃지)
+      if (isDm && partnerEmail) {
+        const cleanPartner = cleanEmailKey(partnerEmail);
+        const partnerRef = doc(db, ROOT_COLLECTION_NAME, `threads_email_${cleanPartner}`);
+        const partnerSnap = await getDoc(partnerRef);
+        let partnerThreads: Thread[] = (partnerSnap.exists() && partnerSnap.data().items) ? partnerSnap.data().items : [];
+        
+        const existingPartnerIdx = partnerThreads.findIndex(t => t.id === threadId);
+        if (existingPartnerIdx >= 0) {
+          partnerThreads[existingPartnerIdx].lastMessage = message.text;
+          partnerThreads[existingPartnerIdx].lastSender = 'assistant';
+          partnerThreads[existingPartnerIdx].updatedAt = message.timestamp;
+          partnerThreads[existingPartnerIdx].unreadCount = (partnerThreads[existingPartnerIdx].unreadCount || 0) + 1;
+        } else {
+          // 상대방에게 아직 해당 방이 없는 경우 새로 방 생성
+          const myAvatar = generateAvatarInfo(currentUserEmail || '', currentUserName || undefined);
+          const newPartnerThread: Thread = {
+            id: threadId,
+            partnerName: currentUserName || currentUserEmail?.split('@')[0] || '친구',
+            partnerEmail: currentUserEmail || '',
+            avatarBg: myAvatar.avatarBg,
+            avatarText: myAvatar.avatarText,
+            lastMessage: message.text,
+            lastSender: 'assistant',
+            updatedAt: message.timestamp,
+            unreadCount: 1, // 최초 1개 미확인
+            isAi: false
+          };
+          partnerThreads.unshift(newPartnerThread);
+        }
+        await setDoc(partnerRef, { items: partnerThreads });
       }
     } catch (e) {
-      console.warn("saveMessage Firestore sync error (local data is safe):", e);
+      console.warn("saveMessage remote error:", e);
     }
   },
 
