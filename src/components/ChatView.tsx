@@ -41,6 +41,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isInputFocusedRef = useRef<boolean>(false);
+
+  // 버튼/아코디언/칩 조작 시 하단 입력창 포커스 및 모바일 키패드가 내려가지 않도록 유지
+  const handlePreventBlur = (e: React.MouseEvent | React.PointerEvent) => {
+    if (isInputFocusedRef.current || document.activeElement === inputRef.current) {
+      e.preventDefault();
+      setTimeout(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    }
+  };
 
   // 스마트 스크롤 제어:
   // - 대화가 적을 때는 상단 버블이 위로 사라지지 않고 빈 공간(empty space)만 축소
@@ -294,6 +306,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     {/* Speech API 음성 듣기 아이콘 */}
                     <button
                       type="button"
+                      onMouseDown={handlePreventBlur}
+                      onPointerDown={handlePreventBlur}
                       onClick={() => handlePlaySpeech(msg.id, msg.text)}
                       className={`inline-flex items-center ml-1.5 align-baseline transition-all active:scale-90 cursor-pointer select-none ${
                         speakingMsgId === msg.id 
@@ -310,6 +324,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     {/* 한국어 해석 아코디언 토글 버튼 */}
                     <button
                       type="button"
+                      onMouseDown={handlePreventBlur}
+                      onPointerDown={handlePreventBlur}
                       onClick={() => handleToggleTranslation(msg.id, msg.text, msg.translation)}
                       className={`inline-flex items-center gap-0.5 ml-1 align-baseline transition-opacity active:scale-95 cursor-pointer select-none ${
                         isUser 
@@ -357,6 +373,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           {translationData.keyExpressions.map((exp, i) => (
                             <span
                               key={i}
+                              onMouseDown={handlePreventBlur}
+                              onPointerDown={handlePreventBlur}
                               onClick={() => handlePlaySpeech(`ke-${i}-${msg.id}`, exp.phrase)}
                               className={`text-[10px] px-1.5 py-0.5 rounded cursor-pointer inline-flex items-center gap-1 active:scale-95 transition-all ${
                                 isUser 
@@ -392,6 +410,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {smartReplies.map((item, idx) => (
             <button
               key={idx}
+              onMouseDown={handlePreventBlur}
+              onPointerDown={handlePreventBlur}
               onClick={() => handleSend(item.reply, undefined, item.translation)}
               className="px-3 py-1 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0"
             >
@@ -415,6 +435,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {recommendations.map((rec) => (
             <div
               key={rec.id}
+              onMouseDown={handlePreventBlur}
+              onPointerDown={handlePreventBlur}
               onClick={() => handleSelectRecommendation(rec)}
               className="px-3 py-2 bg-[#f8fafd] hover:bg-[#eef4ff] active:bg-[#e2edff] rounded-xl cursor-pointer transition-colors flex items-center justify-between gap-2.5 text-left group"
             >
@@ -456,11 +478,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </button>
 
         <input
+          ref={inputRef}
           type="text"
           placeholder="한글 초안이나 영어 메시지를 입력하세요..."
           value={inputText}
           onChange={handleInputChange}
-          onFocus={handleInputFocus}
+          onFocus={() => {
+            isInputFocusedRef.current = true;
+            handleInputFocus();
+          }}
+          onBlur={() => {
+            setTimeout(() => {
+              if (document.activeElement !== inputRef.current) {
+                isInputFocusedRef.current = false;
+              }
+            }, 100);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               handleSend();
@@ -470,6 +503,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         />
 
         <button
+          onMouseDown={handlePreventBlur}
+          onPointerDown={handlePreventBlur}
           onClick={() => handleSend()}
           disabled={!inputText.trim()}
           className="w-10 h-10 rounded-full bg-[#1a73e8] text-white flex items-center justify-center disabled:opacity-40 hover:bg-[#1557b0] active:scale-95 transition-all shadow-sm shrink-0"
