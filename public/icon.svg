@@ -1,12 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1a73e8" />
-      <stop offset="100%" stop-color="#005bbf" />
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="128" fill="url(#grad)" />
-  <circle cx="256" cy="256" r="160" fill="white" opacity="0.15" />
-  <path d="M160 210 C160 170, 190 140, 256 140 C322 140, 352 170, 352 210 C352 245, 330 265, 290 285 L280 290 C265 298, 256 312, 256 330 L256 345" fill="none" stroke="white" stroke-width="36" stroke-linecap="round" />
-  <circle cx="256" cy="390" r="20" fill="white" />
+  <!-- 전체 배경 (PWA Maskable 대응) -->
+  <rect width="512" height="512" fill="#ffffff" />
+
+  <!-- 외부 카드 프레임 (모서리 둥근 사각형) -->
+  <rect x="28" y="28" width="456" height="456" rx="96" ry="96" 
+        fill="#ffffff" stroke="#ebf0f5" stroke-width="16" />
+
+  <!-- 중앙 말풍선 라인 (원형 + 좌하단 꼬리) -->
+  <path d="M 256 118
+           C 334 118 396 180 396 256
+           C 396 332 334 394 256 394
+           C 238 394 220 390 205 383
+           L 158 402
+           C 150 405 142 399 144 391
+           L 154 353
+           C 130 328 116 294 116 256
+           C 116 180 178 118 256 118 Z"
+        fill="#ffffff" 
+        stroke="#d5dfe7" 
+        stroke-width="17" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" />
+
+  <!-- 중앙 대문자 'E' (부드러운 곡선 코너 & 따뜻한 옐로우) -->
+  <g fill="#fedb76">
+    <!-- 세로 메인 기둥 -->
+    <rect x="216" y="196" width="28" height="120" rx="14" ry="14" />
+    <!-- 상단 가로 바 -->
+    <rect x="216" y="196" width="80" height="26" rx="13" ry="13" />
+    <!-- 중단 가로 바 -->
+    <rect x="216" y="243" width="70" height="26" rx="13" ry="13" />
+    <!-- 하단 가로 바 -->
+    <rect x="216" y="290" width="80" height="26" rx="13" ry="13" />
+  </g>
 </svg>
