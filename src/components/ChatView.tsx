@@ -29,6 +29,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // Web Speech API 현재 재생 중인 메시지 ID
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
+  // 아코디언 열기 전의 스크롤 위치를 메시지별로 저장 (닫을 때 원래 위치 복귀용)
+  const prevScrollTopsRef = useRef<Record<string, number>>({});
+
   // 컴포넌트 언마운트 시 재생 중이던 음성 취소
   useEffect(() => {
     return () => {
@@ -70,10 +73,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
-  // 메시지, 추천 카드, 아코디언 변경 시 스크롤 동기화
+  // 신규 메시지 수신 및 추천 카드 변경 시 스크롤 동기화
   useEffect(() => {
     scrollToBottom(true);
-  }, [messages.length, recommendations.length, expandedMsgIds]);
+  }, [messages.length, recommendations.length]);
 
   // 모바일 가상 키보드(visualViewport) 대응: 윈도우 스크롤 억제 및 채팅창 높이 맞춤
   useEffect(() => {
@@ -187,18 +190,71 @@ export const ChatView: React.FC<ChatViewProps> = ({
     handleSend(rec.english, inputText);
   };
 
-  // 말풍선 한국어 해석('한') 토글: 이미 사전 일괄 생성되어 있어 0ms 즉시 펼침/닫힘
+  // 말풍선 한국어 해석('한') 토글:
+  // - 말풍선과 하단 사이 공간(여백)이 있으면 공간을 채우며 자연스럽게 전개
+  // - 하단 빠른답장/입력창 뒤로 겹쳐 들어가지 않도록 부드럽게 스크롤을 추적
+  // - 닫을 때도 열기 전 원래 스크롤 위치로 매끄럽게 복귀
   const handleToggleTranslation = async (msgId: string, englishText: string, currentTranslation?: MessageTranslation) => {
-    // 1. 이미 열려 있으면 닫기
-    if (expandedMsgIds[msgId]) {
+    const isCurrentlyExpanded = Boolean(expandedMsgIds[msgId]);
+
+    // 1. 이미 열려 있는 경우 -> 닫기 및 열기 전 원래 스크롤 위치로 복귀
+    if (isCurrentlyExpanded) {
       setExpandedMsgIds(prev => ({ ...prev, [msgId]: false }));
+
+      const savedTop = prevScrollTopsRef.current[msgId];
+      if (savedTop !== undefined && scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({
+          top: savedTop,
+          behavior: 'smooth'
+        });
+        // 닫힘 애니메이션(200ms) 완료 시점에 최종 미세 보정
+        setTimeout(() => {
+          if (scrollContainerRef.current && scrollContainerRef.current.scrollTop > savedTop) {
+            scrollContainerRef.current.scrollTo({
+              top: savedTop,
+              behavior: 'smooth'
+            });
+          }
+        }, 220);
+        delete prevScrollTopsRef.current[msgId];
+      }
       return;
     }
 
-    // 2. 사전 생성된 데이터로 즉시 열기 (0ms 딜레이)
+    // 2. 열기: 현재 스크롤 위치 보존 후 아코디언 전개
+    if (scrollContainerRef.current) {
+      prevScrollTopsRef.current[msgId] = scrollContainerRef.current.scrollTop;
+    }
     setExpandedMsgIds(prev => ({ ...prev, [msgId]: true }));
 
-    // 3. 레거시 메시지 등 translation이 누락된 경우에만 백그라운드 보조 로드
+    // 3. 200ms 애니메이션 진행 중 실시간으로 하단 빠른답장 바와의 충돌 감지 및 스마트 스크롤
+    // 말풍선 아래 빈 공간이 있으면 그대로 공간을 채우고,
+    // 하단 빠른답장 바 뒤로 파묻히려는 오버플로우가 발생할 때만 딱 그만큼 스크롤을 부드럽게 밀어올림
+    const startTime = performance.now();
+    const duration = 250;
+
+    const followScroll = () => {
+      const container = scrollContainerRef.current;
+      const msgEl = document.getElementById(`chat-msg-${msgId}`);
+      if (container && msgEl) {
+        const containerRect = container.getBoundingClientRect();
+        const msgRect = msgEl.getBoundingClientRect();
+
+        // 말풍선 하단이 컨테이너 하단 경계(빠른 답장 바 윗선)를 침범하는지 체크 (여유 패딩 8px)
+        const overflow = (msgRect.bottom + 8) - containerRect.bottom;
+        if (overflow > 0) {
+          container.scrollTop += overflow;
+        }
+      }
+
+      if (performance.now() - startTime < duration) {
+        requestAnimationFrame(followScroll);
+      }
+    };
+
+    requestAnimationFrame(followScroll);
+
+    // 4. 레거시 메시지 등 translation이 누락된 경우에만 백그라운드 보조 로드
     if (!currentTranslation && !fallbackTranslations[msgId]) {
       try {
         const data = await aiService.translateMessageAsync(englishText);
@@ -280,6 +336,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           return (
             <div
               key={msg.id}
+              id={`chat-msg-${msg.id}`}
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
               <div className="flex items-start gap-2 max-w-[88%]">
