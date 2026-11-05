@@ -505,17 +505,23 @@ The user said to you in English: "${userText}"
 
 Generate a natural conversational response in English (1 to 2 sentences with a warm follow-up question), AND provide its natural Korean translation and 1 to 2 key vocabulary/idiom expressions.
 
-Vocabulary Extraction Rules:
-- Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
-- DO NOT extract arbitrary word combinations (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate").
-- Real phrasal verbs/idioms are allowed (e.g. "catch up", "reach out to", "run out of").
+Translation & Vocabulary Extraction Rules:
+- translation: Natural, idiomatic Korean translation capturing the context and warmth (의역 중심의 자연스러운 구어체 한국어 해석).
+- keyExpressions: Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
+  - DO NOT extract arbitrary word combinations (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate"). Real idioms/phrasal verbs allowed (e.g. "catch up", "slip one's mind").
+  - meaning: Strictly format as "한국어 핵심 의미 (영어식 직역/원어민 감각)" under 25 Korean characters.
+    Examples:
+    * "cozy" -> "아늑하고 포근한 (몸을 웅크려 감싼 듯한)"
+    * "slip one's mind" -> "깜빡 잊다 (마음에서 미끄러져 나가다)"
+    * "under the weather" -> "몸 컨디션이 안 좋은 (궂은 날씨에 짓눌린 듯한)"
+    * "call it a day" -> "오늘 일과를 마치다 (지금까지 한 걸 '하루의 끝'이라 부르다)"
 
 Respond ONLY with valid JSON:
 {
   "reply": "English spoken response (1-2 sentences)",
   "translation": "자연스러운 한국어 해석",
   "keyExpressions": [
-    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "한국어 의미" }
+    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "핵심 의미 (영어식 느낌)" }
   ]
 }`;
 
@@ -613,8 +619,8 @@ Respond ONLY with valid JSON:
         translation: {
           translation: `하하, 쌀쌀한 비를 맞고 나서는 뜨끈한 국수 한 그릇만 한 게 없죠! 🍜 새로운 식당에 가보셨나요, 아니면 자주 가시던 단골집인가요?`,
           keyExpressions: [
-            { phrase: "nothing beats ~", meaning: "~만 한 게 없다, 최고다" },
-            { phrase: "get caught in the rain", meaning: "갑작스러운 비를 만나다" }
+            { phrase: "nothing beats ~", meaning: "~만 한 게 없다, 최고다 (~을 때려눕힐 것이 없다)" },
+            { phrase: "get caught in the rain", meaning: "갑작스러운 비를 만나다 (비 속에 붙잡히다)" }
           ]
         }
       };
@@ -628,8 +634,8 @@ Respond ONLY with valid JSON:
         translation: {
           translation: `커피 한 잔 너무 좋죠! ☕ 근처에 맛있는 디저트가 있는 아늑한 신상 카페가 있어요. 몇 시가 가장 편하세요?`,
           keyExpressions: [
-            { phrase: "sounds wonderful", meaning: "정말 좋다, 듣던 중 반가운 소리다" },
-            { phrase: "works best for you", meaning: "너에게 가장 편하다" }
+            { phrase: "sounds wonderful", meaning: "정말 좋다 (소리가 훌륭하게 들리다)" },
+            { phrase: "works best for you", meaning: "가장 편하다, 좋다 (너에게 가장 잘 작동하다)" }
           ]
         }
       };
@@ -643,8 +649,8 @@ Respond ONLY with valid JSON:
         translation: {
           translation: `안녕! 연락 줘서 반가워요. 오늘 하루는 어떻게 보내고 계신가요?`,
           keyExpressions: [
-            { phrase: "great to hear from you", meaning: "연락 줘서 반갑다" },
-            { phrase: "so far", meaning: "지금까지, 여태까지" }
+            { phrase: "great to hear from you", meaning: "연락 줘서 반갑다 (너로부터 소식을 들어 정말 좋다)" },
+            { phrase: "so far", meaning: "지금까지, 여태까지 (지금까지 멀리 온 만큼)" }
           ]
         }
       };
@@ -658,7 +664,7 @@ Respond ONLY with valid JSON:
         translation: {
           translation: `어휴, 몸 잘 챙기세요! 정말 열심히 일하셨나 봐요. 오늘 밤엔 편하게 쉴 계획이 있으신가요?`,
           keyExpressions: [
-            { phrase: "take care of yourself", meaning: "몸조심하다, 무리하지 않다" },
+            { phrase: "take care of yourself", meaning: "몸조심하다, 무리하지 않다 (네 자신을 돌보다)" },
             { phrase: "relaxing plans", meaning: "편안한 휴식 계획" }
           ]
         }
@@ -672,8 +678,8 @@ Respond ONLY with valid JSON:
       translation: {
         translation: `정말 공감돼요! 이야기해 줘서 고마워요. 지금 어떤 생각하고 계신가요?`,
         keyExpressions: [
-          { phrase: "makes so much sense", meaning: "완전 이해되다, 정말 공감되다" },
-          { phrase: "on your mind", meaning: "마음에 두고 있는, 생각 중인" }
+          { phrase: "makes so much sense", meaning: "완전 이해되다, 정말 공감되다 (아주 많은 이치가 만들어지다)" },
+          { phrase: "on your mind", meaning: "마음에 두고 있는, 생각 중인 (네 마음/머리 위에 붙어 있는)" }
         ]
       }
     };
@@ -691,19 +697,25 @@ Respond ONLY with valid JSON:
       return translationCache.get(trimmed)!;
     }
 
-    const prompt = `Translate this conversational English sentence into natural Korean, and identify 1 to 2 key vocabulary words or idioms with their Korean meanings:
+    const prompt = `Translate this conversational English sentence into natural Korean, and identify 1 to 2 key vocabulary words or idioms:
 "${trimmed}"
 
-Vocabulary Extraction Rules:
-- Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
-- DO NOT extract arbitrary phrase fragments (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate").
-- Real phrasal verbs/idioms are allowed (e.g. "catch up", "reach out to", "on the same page").
+Translation & Vocabulary Extraction Rules:
+- translation: Natural, idiomatic Korean translation capturing context and tone (의역 중심의 자연스러운 구어체 한국어 해석).
+- keyExpressions: Extract 1 to 2 key words or fixed idioms in dictionary base form (lemma).
+  - DO NOT extract arbitrary phrase fragments (e.g. extract "cozy", NEVER "cozy inside"; extract "appreciate", NEVER "really appreciate"). Real idioms/phrasal verbs allowed (e.g. "catch up", "slip one's mind").
+  - meaning: Strictly format as "한국어 핵심 의미 (영어식 직역/원어민 감각)" under 25 Korean characters.
+    Examples:
+    * "cozy" -> "아늑하고 포근한 (몸을 웅크려 감싼 듯한)"
+    * "slip one's mind" -> "깜빡 잊다 (마음에서 미끄러져 나가다)"
+    * "under the weather" -> "몸 컨디션이 안 좋은 (궂은 날씨에 짓눌린 듯한)"
+    * "call it a day" -> "오늘 일과를 마치다 (지금까지 한 걸 '하루의 끝'이라 부르다)"
 
 Respond ONLY with valid JSON:
 {
   "translation": "자연스러운 한국어 해석 1~2문장",
   "keyExpressions": [
-    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "한국어 의미" }
+    { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "핵심 의미 (영어식 느낌)" }
   ]
 }`;
 
@@ -801,6 +813,10 @@ ${contextText}
 Generate 3 natural, conversational, short reply suggestions for 'Me' to reply to '${partnerName}' (3 to 7 words each).
 For EACH reply, provide its natural Korean translation and 1 key expression/idiom.
 
+Translation & Vocabulary Extraction Rules:
+- translation: Natural, idiomatic Korean translation (의역 중심).
+- keyExpressions: 1 key word/idiom in base form. Format meaning as "한국어 핵심 의미 (영어식 직역/원어민 감각)" under 25 chars.
+
 Respond ONLY with valid JSON:
 {
   "replies": [
@@ -808,7 +824,7 @@ Respond ONLY with valid JSON:
       "reply": "English reply (3-7 words)",
       "translation": "자연스러운 한국어 해석",
       "keyExpressions": [
-        { "phrase": "key idiom or word", "meaning": "한국어 의미" }
+        { "phrase": "key idiom or word", "meaning": "핵심 의미 (영어식 느낌)" }
       ]
     }
   ]
