@@ -25,7 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { user, logout, appTarget, isAdmin } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (typeof window !== 'undefined' ? (window as any).deferredPrompt : null));
+  const [showIosInstallModal, setShowIosInstallModal] = useState(false);
+  const [showGeneralInstallHelp, setShowGeneralInstallHelp] = useState(false);
 
   // Gemini API 상태 관리
   const envGeminiKey = (import.meta.env.VITE_GEMINI_API_KEY as string) || '';
@@ -133,24 +135,78 @@ export const Header: React.FC<HeaderProps> = ({
     }, 1200);
   };
 
-  // PWA 설치 감지
+  // 기기 및 PWA 설치 환경 감지
+  const isIOS = () => {
+    if (typeof window === 'undefined') return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  };
+
+  const isStandalone = () => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+  };
+
+  // PWA 설치 감지 및 동기화 (전역 캐시 포함)
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+    }
+
     const handleBeforeInstall = (e: any) => {
       e.preventDefault();
+      (window as any).deferredPrompt = e;
       setDeferredPrompt(e);
     };
 
+    const handlePromptReady = () => {
+      if ((window as any).deferredPrompt) {
+        setDeferredPrompt((window as any).deferredPrompt);
+      }
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('pwa-prompt-ready', handlePromptReady);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('pwa-prompt-ready', handlePromptReady);
+    };
   }, []);
 
+  // 홈 화면에 앱 설치하기 클릭 핸들러
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      setDeferredPrompt(null);
+    // 1. 이미 앱으로 실행 중인 경우
+    if (isStandalone()) {
+      alert("이미 홈 화면에 앱으로 설치되어 실행 중입니다! 🎉");
+      return;
+    }
+
+    // 2. iOS(아이폰/아이패드) Safari 기기인 경우 -> 전용 안내 모달 노출
+    if (isIOS()) {
+      setShowIosInstallModal(true);
+      return;
+    }
+
+    // 3. Android Chrome / PC Chrome 등 설치 프롬프트 지원 브라우저
+    const promptEvent = (window as any).deferredPrompt || deferredPrompt;
+    if (promptEvent) {
+      try {
+        promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          (window as any).deferredPrompt = null;
+          setDeferredPrompt(null);
+        }
+      } catch (err) {
+        console.warn("PWA prompt error:", err);
+        setShowGeneralInstallHelp(true);
+      }
     } else {
-      alert("iOS Safari 브라우저는 하단의 [공유] 아이콘을 누른 후 [홈 화면에 추가]를 선택하시면 앱으로 설치할 수 있습니다.");
+      // 프롬프트가 지원되지 않거나 수동 설치가 필요한 브라우저 안내 모달
+      setShowGeneralInstallHelp(true);
     }
   };
 
@@ -651,6 +707,106 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         </>
+      )}
+
+      {/* iOS Safari 전용 홈 화면 앱 설치 안내 모달 */}
+      {showIosInstallModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-[#dadce0] animate-in zoom-in-95 duration-150 text-left">
+            <div className="flex items-center justify-between pb-2 border-b border-[#f1f3f4]">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#1a73e8] text-[24px]">install_mobile</span>
+                <h3 className="text-[16px] font-bold text-[#1f1f1f]">아이폰 홈 화면에 앱 설치하기</h3>
+              </div>
+              <button
+                onClick={() => setShowIosInstallModal(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[#747775] hover:bg-black/5"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p className="text-[13px] text-[#5f6368] leading-relaxed">
+              Apple 정책상 Safari 브라우저에서 직접 홈 화면에 추가할 수 있습니다:
+            </p>
+
+            <div className="space-y-3 bg-[#f8fafd] p-3.5 rounded-2xl border border-[#e8f0fe] text-[13px] text-[#1f1f1f]">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[#1a73e8] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">1</span>
+                <div>
+                  Safari 브라우저 화면 하단의 <strong className="text-[#1a73e8] inline-flex items-center gap-0.5"><span className="material-symbols-outlined text-[16px] align-middle">ios_share</span> 공유 버튼</strong>을 누릅니다.
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[#1a73e8] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">2</span>
+                <div>
+                  아래로 스크롤하여 <strong className="text-[#1a73e8] inline-flex items-center gap-0.5"><span className="material-symbols-outlined text-[16px] align-middle">add_box</span> [홈 화면에 추가]</strong>를 선택합니다.
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[#1a73e8] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">3</span>
+                <div>
+                  화면 우측 상단의 <strong className="text-[#1a73e8]">[추가]</strong>를 누르면 홈 화면에 앱 아이콘이 바로 생성됩니다!
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowIosInstallModal(false)}
+              className="w-full py-2.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-xl text-[13px] font-semibold transition-colors"
+            >
+              알겠습니다
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 안드로이드 / PC 수동 설치 가이드 모달 */}
+      {showGeneralInstallHelp && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-[#dadce0] animate-in zoom-in-95 duration-150 text-left">
+            <div className="flex items-center justify-between pb-2 border-b border-[#f1f3f4]">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#1a73e8] text-[24px]">install_desktop</span>
+                <h3 className="text-[16px] font-bold text-[#1f1f1f]">앱 설치 안내</h3>
+              </div>
+              <button
+                onClick={() => setShowGeneralInstallHelp(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[#747775] hover:bg-black/5"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p className="text-[13px] text-[#444746] leading-relaxed">
+              브라우저의 자동 설치 창이 열리지 않는 경우, 아래 방법으로 즉시 설치하실 수 있습니다:
+            </p>
+
+            <div className="space-y-2.5 bg-[#f8fafd] p-3.5 rounded-2xl border border-[#edf0f5] text-[12px] text-[#1f1f1f]">
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-[#1a73e8] text-[18px] shrink-0 mt-0.5">download</span>
+                <div>
+                  <strong>Chrome / Edge 브라우저 주소창 우측</strong>의 <strong>[앱 설치]</strong> 아이콘을 클릭하세요.
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-[#1a73e8] text-[18px] shrink-0 mt-0.5">more_vert</span>
+                <div>
+                  또는 브라우저 오른쪽 상단 메뉴(<strong>⋮</strong>)에서 <strong>[홈 화면에 추가]</strong> 또는 <strong>[앱 설치]</strong>를 선택하시면 됩니다.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowGeneralInstallHelp(false)}
+              className="w-full py-2.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-xl text-[13px] font-semibold transition-colors"
+            >
+              확인
+            </button>
+          </div>
+        </div>
       )}
     </header>
   );
