@@ -593,19 +593,22 @@ export const storageService = {
       message.senderName = currentUserName || undefined;
     }
 
-    // 1. [0ms 동기식 보장] 브라우저 로컬 스토리지에 즉시 무조건 먼저 저장!
+    // 1. [0ms 동기식 보장] 브라우저 로컬 스토리지에 즉시 무조건 먼저 저장 (기존 메시지는 업데이트)!
     let currentLocalMsgs: Message[] = [];
     try {
       const raw = localStorage.getItem(localKey);
       if (raw) currentLocalMsgs = JSON.parse(raw);
     } catch (e) {}
     
-    if (!currentLocalMsgs.some(m => m.id === message.id)) {
+    const existingLocalIdx = currentLocalMsgs.findIndex(m => m.id === message.id);
+    if (existingLocalIdx >= 0) {
+      currentLocalMsgs[existingLocalIdx] = { ...currentLocalMsgs[existingLocalIdx], ...message };
+    } else {
       currentLocalMsgs.push(message);
-      try {
-        localStorage.setItem(localKey, JSON.stringify(currentLocalMsgs));
-      } catch (e) {}
     }
+    try {
+      localStorage.setItem(localKey, JSON.stringify(currentLocalMsgs));
+    } catch (e) {}
 
     // 내 로컬 스레드 목록 갱신
     try {
@@ -625,17 +628,20 @@ export const storageService = {
 
     // 2. Firestore 동기화
     try {
-      // 2-1. 메시지 저장
+      // 2-1. 메시지 저장 (신규 추가 또는 메타데이터 업데이트)
       const msgDocRef = doc(db, ROOT_COLLECTION_NAME, docId);
       const snap = await getDoc(msgDocRef);
       let items: Message[] = [];
       if (snap.exists() && snap.data().items) {
         items = snap.data().items as Message[];
       }
-      if (!items.some(m => m.id === message.id)) {
+      const existingIdx = items.findIndex(m => m.id === message.id);
+      if (existingIdx >= 0) {
+        items[existingIdx] = { ...items[existingIdx], ...message };
+      } else {
         items.push(message);
-        await setDoc(msgDocRef, { items });
       }
+      await setDoc(msgDocRef, { items });
 
       // 2-2. 내 스레드 목록 업데이트
       if (currentUserEmail) {

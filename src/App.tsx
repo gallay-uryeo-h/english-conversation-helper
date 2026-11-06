@@ -303,7 +303,7 @@ const MainApp: React.FC = () => {
     await storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
 
     // 1-1. 내 발화의 한국어 해석 및 상대방을 위한 0ms 스마트 빠른 답장 3개 일괄 비동기 동봉 생성
-    aiService.enrichMessageMetadataAsync(text).then((meta) => {
+    aiService.enrichMessageMetadataAsync(text).then(async (meta) => {
       let hasUpdate = false;
       if (!userMsg.translation && meta.translation) {
         userMsg.translation = meta.translation;
@@ -314,7 +314,7 @@ const MainApp: React.FC = () => {
         hasUpdate = true;
       }
       if (hasUpdate) {
-        storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
+        await storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
         setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, ...userMsg } : m));
       }
     }).catch(e => console.warn("User message enrich metadata error:", e));
