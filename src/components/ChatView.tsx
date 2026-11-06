@@ -315,34 +315,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
 
       try {
-        // [개선]: 한글이 포함된 경우에만 영어 정제/번역 수행
-        if (isKorean) {
-          // A. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
-          if (recommendations.length > 0) {
-            const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
-            candidateText = naturalCard.english;
-          } 
-          // B. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
-          else {
-            try {
-              setIsDebouncing(true);
-              const recs = await aiService.generateRecommendationsAsync(rawInput);
-              if (recs && recs.length > 0) {
-                const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
-                candidateText = naturalCard.english;
-              }
-            } catch (err) {
-              console.warn("Instant recommendation error on send:", err);
-            } finally {
-              setIsDebouncing(false);
+        // [한글/영문 공통]: AI 추천 카드가 있으면 더 자연스러운 원어민 표현(Natural)으로 다듬어서 전송
+        // A. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
+        if (recommendations.length > 0) {
+          const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
+          candidateText = naturalCard.english;
+        } 
+        // B. 아직 추천 카드가 뜨기 전(초고속 엔터/전송)인 경우 -> 즉시 1회 추천 생성하여 정제
+        else {
+          try {
+            setIsDebouncing(true);
+            const recs = await aiService.generateRecommendationsAsync(rawInput);
+            if (recs && recs.length > 0) {
+              const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
+              candidateText = naturalCard.english;
             }
+          } catch (err) {
+            console.warn("Instant recommendation error on send:", err);
+          } finally {
+            setIsDebouncing(false);
           }
-        } else {
-          // [개선]: 순수 영문 입력인 경우 -> 사용자가 직접 타이핑한 문장 원형 그대로 즉시 전송!
-          candidateText = rawInput;
         }
 
-        // C. 만약 추천 생성 실패 시 fallback
+        // C. 만약 추천 생성 실패 시 fallback (사용자 입력 원문)
         if (!candidateText) {
           candidateText = rawInput;
         }
