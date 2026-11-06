@@ -115,9 +115,9 @@ export const ThreadsView: React.FC<ThreadsViewProps> = ({
     if (isToday) {
       const hours = d.getHours();
       const minutes = d.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? '오후' : '오전';
-      const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
-      return `${ampm} ${formattedHours}:${minutes}`;
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const formattedHours = hours % 12 || 12;
+      return `${formattedHours}:${minutes} ${period}`;
     }
 
     const yesterday = new Date(now);

@@ -181,16 +181,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   }, [activeThread.id, messages.length, user?.email]);
 
-  // 대화 시간 포맷 헬퍼 (카카오톡 스타일 오전/오후 HH:MM)
+  // 대화 시간 포맷 헬퍼 (영어 메신저 스타일 H:MM AM/PM)
   const formatMessageTime = (timestamp?: number): string => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    const period = hours < 12 ? '오전' : '오후';
+    const period = hours < 12 ? 'AM' : 'PM';
     const displayHours = hours % 12 === 0 ? 12 : hours % 12;
     const displayMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
-    return `${period} ${displayHours}:${displayMinutes}`;
+    return `${displayHours}:${displayMinutes} ${period}`;
   };
 
   // 입력창 포커스 시 브라우저의 기본 페이지 스크롤 억제 및 대화 영역 보정
@@ -599,7 +599,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 )}
 
                 <div
-                  className={`relative px-3.5 py-2 rounded-2xl shadow-xs text-[14px] leading-relaxed transition-all ${
+                  className={`relative px-3 py-1.5 rounded-2xl shadow-xs text-[14px] leading-relaxed transition-all ${
                     isUser
                       ? 'bg-[#1a73e8] text-white rounded-tr-xs'
                       : 'bg-white text-[#1f1f1f] border border-[#e0e3e7] rounded-tl-xs'
