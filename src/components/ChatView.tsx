@@ -4,6 +4,26 @@ import { aiService, SmartReplyItem, DEFAULT_SMART_REPLIES } from '../services/ai
 import { useAuth } from '../contexts/AuthContext';
 import { storageService } from '../services/storageService';
 
+// 로컬 스토리지 기반 스마트 빠른 답장 영구 캐시 (대화방 재입장 시 0ms 즉시 복원)
+const getCachedSmartReplies = (threadId: string, lastMsgText: string): SmartReplyItem[] | null => {
+  try {
+    const raw = localStorage.getItem(`sr_${threadId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.lastMsgText === lastMsgText && Array.isArray(parsed.replies) && parsed.replies.length > 0) {
+        return parsed.replies;
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
+const setCachedSmartReplies = (threadId: string, lastMsgText: string, replies: SmartReplyItem[]) => {
+  try {
+    localStorage.setItem(`sr_${threadId}`, JSON.stringify({ lastMsgText, replies, timestamp: Date.now() }));
+  } catch (e) {}
+};
+
 interface ChatViewProps {
   activeThread: Thread;
   messages: Message[];
@@ -164,19 +184,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 120);
   };
 
-  // 대화 맥락이 바뀔 때 AI 스마트 답장 생성 (내 턴: 상대방 발화 직후에만 생성)
+  // 마지막 메시지 정보 추적 (내 턴 여부 및 빠른 답장 연동)
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+  // 대화 맥락이 바뀔 때 또는 대화방 재진입 시 상대방 마지막 말에 대한 빠른 답장 올바로 로드
   useEffect(() => {
     let isCancelled = false;
-    const fetchSmartReplies = async () => {
-      if (messages.length === 0) return;
-      const lastMsg = messages[messages.length - 1];
-      // 내가 보낸 직후(내 턴이 아닐 때)는 빠른 답장 API 호출 생략
-      if (lastMsg.sender === 'user') return;
+    if (!lastMessage || lastMessage.sender === 'user') {
+      return;
+    }
 
+    // 1. 기존에 생성된 빠른 답장이 있다면 로컬 캐시에서 0ms 즉시 복원
+    const cached = getCachedSmartReplies(activeThread.id, lastMessage.text);
+    if (cached) {
+      setSmartReplies(cached);
+    }
+
+    // 2. 캐시가 없거나 최신 문맥에 맞게 새로 로드
+    const fetchSmartReplies = async () => {
       try {
         const replies = await aiService.generateSmartRepliesAsync(messages, activeThread.partnerName);
         if (!isCancelled && replies && replies.length > 0) {
           setSmartReplies(replies);
+          setCachedSmartReplies(activeThread.id, lastMessage.text, replies);
         }
       } catch (e) {
         console.warn("Smart replies fetch error:", e);
@@ -185,7 +215,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     fetchSmartReplies();
     return () => { isCancelled = true; };
-  }, [messages.length, activeThread.partnerName]);
+  }, [activeThread.id, lastMessage?.id, lastMessage?.text]);
 
   // 한글 또는 영어 입력 디바운스 (400ms 시차를 두어 API 과도 호출 및 Rate Limit 방지)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -723,7 +753,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           ref={inputRef}
           type="text"
           disabled={isSending}
-          placeholder={isSending ? "자연스러운 영어로 정제하여 전송 중..." : "한글 초안이나 영어 메시지를 입력하세요..."}
+          placeholder={isSending ? "자연스러운 영어로 정제하여 전송 중..." : "한국어 또는 영어로 입력하세요..."}
           value={inputText}
           onChange={handleInputChange}
           onFocus={() => {
