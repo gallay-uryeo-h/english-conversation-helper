@@ -164,11 +164,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 120);
   };
 
-  // 대화 맥락이 바뀔 때 AI 스마트 답장 생성
+  // 대화 맥락이 바뀔 때 AI 스마트 답장 생성 (내 턴: 상대방 발화 직후에만 생성)
   useEffect(() => {
     let isCancelled = false;
     const fetchSmartReplies = async () => {
       if (messages.length === 0) return;
+      const lastMsg = messages[messages.length - 1];
+      // 내가 보낸 직후(내 턴이 아닐 때)는 빠른 답장 API 호출 생략
+      if (lastMsg.sender === 'user') return;
+
       try {
         const replies = await aiService.generateSmartRepliesAsync(messages, activeThread.partnerName);
         if (!isCancelled && replies && replies.length > 0) {
@@ -640,31 +644,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
         )}
       </div>
 
-      {/* 2. AI 스마트 빠른 답장 칩 목록 (사전 번역 탑재, 대화가 있을 때만 표시) */}
-      {messages.length > 0 && smartReplies.length > 0 && (
-        <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-          <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
-            빠른 답장:
-          </span>
-          {smartReplies.map((item, idx) => (
-            <button
-              key={idx}
-              onMouseDown={handlePreventBlur}
-              onPointerDown={handlePreventBlur}
-              onClick={() => handleSend(item.reply, undefined, item.translation)}
-              className="px-3 py-1.5 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0 flex items-center gap-1.5 group"
-            >
-              <span className="font-semibold">{item.reply}</span>
-              {item.translation?.translation && item.translation.translation !== item.reply && (
-                <span className="text-[10px] text-[#5f6368] group-hover:text-[#1a73e8] border-l border-[#d2e3fc] pl-1.5 max-w-[150px] truncate">
-                  {item.translation.translation}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* 2. AI 스마트 빠른 답장 칩 목록 (내 턴일 때만 표시: 상대방 발화 직후) */}
+      {(() => {
+        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+        const isMyTurn = Boolean(lastMessage && lastMessage.sender !== 'user');
+
+        if (!isMyTurn || smartReplies.length === 0) return null;
+
+        return (
+          <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 animate-in fade-in duration-200">
+            <span className="text-[11px] font-semibold text-[#5f6368] shrink-0 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px] text-[#1a73e8]">bolt</span>
+              빠른 답장:
+            </span>
+            {smartReplies.map((item, idx) => (
+              <button
+                key={idx}
+                onMouseDown={handlePreventBlur}
+                onPointerDown={handlePreventBlur}
+                onClick={() => handleSend(item.reply, undefined, item.translation)}
+                className="px-3 py-1.5 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0 flex items-center gap-1.5 group"
+              >
+                <span className="font-semibold">{item.reply}</span>
+                {item.translation?.translation && item.translation.translation !== item.reply && (
+                  <span className="text-[10px] text-[#5f6368] group-hover:text-[#1a73e8] border-l border-[#d2e3fc] pl-1.5 max-w-[150px] truncate">
+                    {item.translation.translation}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* 3. 디바운스 로딩 인디케이터 */}
       {isDebouncing && (
