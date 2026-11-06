@@ -73,6 +73,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }, [activeThread.id, activeThread.partnerEmail, user?.email]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
   const recommendationSeqRef = useRef<number>(0);
@@ -90,25 +91,45 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   // 스마트 스크롤 제어:
-  // - 대화가 적을 때는 상단 버블이 위로 사라지지 않고 빈 공간(empty space)만 축소
-  // - 대화가 컨테이너 높이를 넘칠 때만 마지막 버블이 입력창 바로 위에 붙도록 스크롤
+  // - 컨테이너 크기 변화(빠른답장 바, 추천창, 키보드) 및 내용 높이 증가 시 완벽하게 바닥으로 보정
   const scrollToBottom = (smooth = true) => {
     if (!scrollContainerRef.current) return;
-    const { scrollHeight, clientHeight } = scrollContainerRef.current;
-    if (scrollHeight > clientHeight) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollHeight - clientHeight,
-        behavior: smooth ? 'smooth' : 'auto'
+    const el = scrollContainerRef.current;
+
+    requestAnimationFrame(() => {
+      const { scrollHeight, clientHeight } = el;
+      if (scrollHeight > clientHeight) {
+        el.scrollTo({
+          top: scrollHeight - clientHeight + 40,
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      } else {
+        el.scrollTop = 0;
+      }
+      bottomAnchorRef.current?.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end'
       });
-    } else {
-      scrollContainerRef.current.scrollTop = 0;
-    }
+    });
   };
 
-  // 신규 메시지 수신 및 추천 카드 변경 시 스크롤 동기화
+  // 컨테이너 크기 변화 실시간 감지 (하단 빠른답장 바 등장, 키보드 오픈, 추천 카드 노출 등)
   useEffect(() => {
-    scrollToBottom(true);
-  }, [messages.length, recommendations.length]);
+    const container = scrollContainerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    let isFirst = true;
+    const ro = new ResizeObserver(() => {
+      if (isFirst) {
+        isFirst = false;
+        return;
+      }
+      scrollToBottom(false);
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
 
   // 모바일 가상 키보드(visualViewport) 대응: 윈도우 스크롤 억제 및 채팅창 높이 맞춤
   useEffect(() => {
@@ -187,6 +208,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // 마지막 메시지 정보 추적 (내 턴 여부 및 빠른 답장 연동)
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+  // 신규 메시지 수신, 비동기 번역/핵심어휘 도착, 빠른 답장/추천창/타이핑 상태 변화 시 스크롤 동기화
+  useEffect(() => {
+    scrollToBottom(true);
+  }, [
+    messages.length, 
+    recommendations.length, 
+    smartReplies.length, 
+    isPartnerTyping, 
+    lastMessage?.id,
+    lastMessage?.translation?.translation,
+    (lastMessage?.translation?.keyExpressions || []).length
+  ]);
 
   // 대화 맥락이 바뀔 때 또는 대화방 재진입 시 상대방 마지막 말에 대한 빠른 답장 로드
   useEffect(() => {
@@ -516,7 +550,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             isInputFocusedRef.current = false;
           }
         }}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain flex flex-col"
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 space-y-3.5 overscroll-contain flex flex-col"
       >
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[#747775] my-auto">
@@ -706,6 +740,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* 하단 스크롤 안전 앵커 및 쾌적한 여백 */}
+        <div ref={bottomAnchorRef} className="h-3 shrink-0 select-none pointer-events-none" />
       </div>
 
       {/* 2. AI 스마트 빠른 답장 칩 목록 (내 턴일 때만 표시: 상대방 발화 직후 & 내가 입력 중이지 않을 때) */}
