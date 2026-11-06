@@ -188,31 +188,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 마지막 메시지 정보 추적 (내 턴 여부 및 빠른 답장 연동)
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 
-  // 대화 맥락이 바뀔 때 또는 대화방 재진입 시 상대방 마지막 말에 대한 빠른 답장 올바로 로드
+  // 대화 맥락이 바뀔 때 또는 대화방 재진입 시 상대방 마지막 말에 대한 빠른 답장 로드
   useEffect(() => {
     let isCancelled = false;
     if (!lastMessage || lastMessage.sender === 'user') {
+      // 내가 말을 보낸 직후: 빠른 답장 즉시 클리어
+      setSmartReplies([]);
       return;
     }
 
-    // 1. [0ms 즉각 노출] 상대방 발화 메시지 자체에 빠른 답장이 동봉되어 있는 경우 즉시 반영!
-    if (lastMessage.suggestedReplies && lastMessage.suggestedReplies.length > 0) {
-      setSmartReplies(lastMessage.suggestedReplies);
-      setCachedSmartReplies(activeThread.id, lastMessage.text, lastMessage.suggestedReplies);
-      return;
-    }
+    // 1. 이전 발화의 잔여 답장이 찰나에 보이지 않도록 즉시 클리어
+    setSmartReplies([]);
 
-    // 2. 로컬 캐시에 기존 저장된 답장이 있는 경우 0ms 복원
+    // 2. 로컬 캐시에 기존 저장된 답장이 있는 경우 0ms 즉시 복원
     const cached = getCachedSmartReplies(activeThread.id, lastMessage.text);
     if (cached) {
       setSmartReplies(cached);
       return;
     }
 
-    // 3. 이전 발화의 빠른 답장이 찰나에 튀지 않도록 이전 잔여 답장 클리어
-    setSmartReplies([]);
-
-    // 4. 레거시 메시지 등 동봉되지 않은 경우 비동기 보조 생성
+    // 3. 비동기 생성 (맥락 기반 스마트 빠른 답장)
     const fetchSmartReplies = async () => {
       try {
         const replies = await aiService.generateSmartRepliesAsync(messages, activeThread.partnerName);
@@ -227,7 +222,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     fetchSmartReplies();
     return () => { isCancelled = true; };
-  }, [activeThread.id, lastMessage?.id, lastMessage?.text, (lastMessage?.suggestedReplies || []).length]);
+  }, [activeThread.id, lastMessage?.id, lastMessage?.text]);
 
   // 한글 또는 영어 입력 디바운스 (400ms 시차를 두어 API 과도 호출 및 Rate Limit 방지)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

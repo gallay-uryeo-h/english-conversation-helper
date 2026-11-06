@@ -8,7 +8,6 @@ export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta
 export interface AssistantReplyData {
   reply: string;
   translation: MessageTranslation;
-  suggestedReplies?: SmartReplyItem[];
 }
 
 export type { SmartReplyItem };
@@ -503,9 +502,7 @@ Respond ONLY with valid JSON.`;
     const prompt = `You are ${partnerName}, a close friend having an English conversation with the user.
 The user said to you in English: "${userText}"
 
-Generate:
-1. A natural conversational response in English (1 to 2 sentences with a warm follow-up question), with its natural Korean translation and 1 to 2 key vocabulary/idiom expressions.
-2. Exactly 3 short, natural English reply suggestions for the user to reply to your response (3 to 7 words each), along with each suggestion's natural Korean translation.
+Generate a natural conversational response in English (1 to 2 sentences with a warm follow-up question), with its natural Korean translation and 1 to 2 key vocabulary/idiom expressions.
 
 Translation & Vocabulary Extraction Rules:
 - translation: Natural, idiomatic Korean translation capturing the context and warmth (의역 중심의 자연스러운 구어체 한국어 해석).
@@ -518,11 +515,6 @@ Respond ONLY with valid JSON:
   "translation": "자연스러운 한국어 해석",
   "keyExpressions": [
     { "phrase": "base form word or idiom (e.g. cozy)", "meaning": "핵심 의미 (영어식 느낌)" }
-  ],
-  "suggestedReplies": [
-    { "reply": "Short natural English reply 1 (3-7 words)", "translation": "자연스러운 한국어 뜻" },
-    { "reply": "Short natural English reply 2 (3-7 words)", "translation": "자연스러운 한국어 뜻" },
-    { "reply": "Short natural English reply 3 (3-7 words)", "translation": "자연스러운 한국어 뜻" }
   ]
 }`;
 
@@ -545,23 +537,12 @@ Respond ONLY with valid JSON:
           if (text) {
             const parsed = JSON.parse(text);
             if (parsed.reply) {
-              const suggestedReplies: SmartReplyItem[] = Array.isArray(parsed.suggestedReplies)
-                ? parsed.suggestedReplies.slice(0, 3).map((item: any) => ({
-                    reply: item.reply || '',
-                    translation: {
-                      translation: item.translation || item.reply || '',
-                      keyExpressions: []
-                    }
-                  }))
-                : [];
-
               const result: AssistantReplyData = {
                 reply: parsed.reply.trim(),
                 translation: {
                   translation: parsed.translation || '',
                   keyExpressions: Array.isArray(parsed.keyExpressions) ? parsed.keyExpressions : []
-                },
-                suggestedReplies
+                }
               };
               translationCache.set(result.reply, result.translation);
               return result;
@@ -600,23 +581,12 @@ Respond ONLY with valid JSON:
           if (content) {
             const parsed = JSON.parse(content);
             if (parsed.reply) {
-              const suggestedReplies: SmartReplyItem[] = Array.isArray(parsed.suggestedReplies)
-                ? parsed.suggestedReplies.slice(0, 3).map((item: any) => ({
-                    reply: item.reply || '',
-                    translation: {
-                      translation: item.translation || item.reply || '',
-                      keyExpressions: []
-                    }
-                  }))
-                : [];
-
               const result: AssistantReplyData = {
                 reply: parsed.reply.trim(),
                 translation: {
                   translation: parsed.translation || '',
                   keyExpressions: Array.isArray(parsed.keyExpressions) ? parsed.keyExpressions : []
-                },
-                suggestedReplies
+                }
               };
               translationCache.set(result.reply, result.translation);
               return result;
@@ -710,92 +680,11 @@ Respond ONLY with valid JSON:
     return def;
   },
 
-  // 발신 메시지의 번역, 핵심 어휘, 그리고 수신자(상대방)를 위한 0ms 스마트 빠른 답장 일괄 동봉 생성
-  async enrichMessageMetadataAsync(englishText: string): Promise<{
-    translation: MessageTranslation;
-    suggestedReplies: SmartReplyItem[];
-  }> {
+  // 발신 메시지의 번역 및 핵심 어휘 생성 (동봉 답장 없이 단순 메타데이터 보강)
+  async enrichMessageMetadataAsync(englishText: string): Promise<MessageTranslation> {
     const trimmed = englishText.trim();
-    if (!trimmed) {
-      return {
-        translation: { translation: '', keyExpressions: [] },
-        suggestedReplies: []
-      };
-    }
-
-    const prompt = `Given this spoken English message:
-"${trimmed}"
-
-Perform TWO tasks and return strictly valid JSON:
-1. Translate it into natural, conversational Korean, and extract 1-2 key words or idioms in base form (format meaning as "핵심의미 (영어식 뉘앙스)" under 25 chars).
-2. Generate exactly 3 short, natural English reply suggestions for the other person to respond with (3 to 7 words each), along with each suggestion's natural Korean translation.
-
-Respond ONLY with valid JSON:
-{
-  "translation": "자연스러운 한국어 해석",
-  "keyExpressions": [
-    { "phrase": "base form word or idiom", "meaning": "핵심 의미 (영어식 느낌)" }
-  ],
-  "suggestedReplies": [
-    { "reply": "Short natural English reply 1 (3-7 words)", "translation": "자연스러운 한국어 뜻" },
-    { "reply": "Short natural English reply 2 (3-7 words)", "translation": "자연스러운 한국어 뜻" },
-    { "reply": "Short natural English reply 3 (3-7 words)", "translation": "자연스러운 한국어 뜻" }
-  ]
-}`;
-
-    // 1. Gemini API 우선
-    const geminiKey = getGeminiApiKey();
-    if (geminiKey) {
-      try {
-        const res = await fetch(`${GEMINI_API_BASE}/${GEMINI_DEFAULT_MODEL}:generateContent?key=${geminiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) {
-            const parsed = JSON.parse(text);
-            const translation: MessageTranslation = {
-              translation: parsed.translation || '',
-              keyExpressions: Array.isArray(parsed.keyExpressions) ? parsed.keyExpressions : []
-            };
-            translationCache.set(trimmed, translation);
-
-            const suggestedReplies: SmartReplyItem[] = Array.isArray(parsed.suggestedReplies)
-              ? parsed.suggestedReplies.slice(0, 3).map((item: any) => {
-                  const rep = item.reply || '';
-                  const itemTrans: MessageTranslation = {
-                    translation: item.translation || rep,
-                    keyExpressions: []
-                  };
-                  translationCache.set(rep, itemTrans);
-                  return {
-                    reply: rep,
-                    translation: itemTrans
-                  };
-                })
-              : [];
-
-            return { translation, suggestedReplies };
-          }
-        }
-      } catch (e) {
-        console.warn("Gemini enrichMessageMetadata error, trying fallback:", e);
-      }
-    }
-
-    // 2. Fallback: 기존 번역 로직 실행
-    const trans = await this.translateMessageAsync(trimmed);
-    return {
-      translation: trans,
-      suggestedReplies: []
-    };
+    if (!trimmed) return { translation: '', keyExpressions: [] };
+    return this.translateMessageAsync(trimmed);
   },
 
   // 말풍선 한국어 해석 및 핵심 표현 아코디언 제공 (Gemini -> Groq -> 캐싱)

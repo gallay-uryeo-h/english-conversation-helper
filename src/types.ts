@@ -54,7 +54,6 @@ export interface Message {
   recommendations?: RecommendationCard[];
   analysis?: MessageAnalysis;
   translation?: MessageTranslation;
-  suggestedReplies?: SmartReplyItem[];
 }
 
 export interface SavedExpression {
