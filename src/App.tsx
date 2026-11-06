@@ -305,9 +305,11 @@ const MainApp: React.FC = () => {
     // 1-1. 내 발화의 한국어 해석 및 상대방을 위한 0ms 스마트 빠른 답장 3개 일괄 비동기 동봉 생성
     aiService.enrichMessageMetadataAsync(text).then(async (meta) => {
       let hasUpdate = false;
-      if (!userMsg.translation && meta.translation) {
-        userMsg.translation = meta.translation;
-        hasUpdate = true;
+      if (meta.translation) {
+        if (!userMsg.translation || !userMsg.translation.keyExpressions || userMsg.translation.keyExpressions.length === 0) {
+          userMsg.translation = meta.translation;
+          hasUpdate = true;
+        }
       }
       if (meta.suggestedReplies && meta.suggestedReplies.length > 0) {
         userMsg.suggestedReplies = meta.suggestedReplies;

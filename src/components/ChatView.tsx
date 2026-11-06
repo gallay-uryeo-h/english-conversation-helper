@@ -75,6 +75,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
+  const recommendationSeqRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const isInputFocusedRef = useRef<boolean>(false);
 
@@ -253,30 +254,37 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     const trimmed = val.trim();
     if (trimmed.length < 2) {
+      recommendationSeqRef.current++;
       setRecommendations([]);
       setIsDebouncing(false);
       return;
     }
 
     setIsDebouncing(true);
+    const thisSeq = ++recommendationSeqRef.current;
 
     debounceTimerRef.current = setTimeout(async () => {
       const currentVal = latestInputRef.current.trim();
-      if (!currentVal) {
-        setRecommendations([]);
-        setIsDebouncing(false);
+      if (!currentVal || recommendationSeqRef.current !== thisSeq) {
+        if (recommendationSeqRef.current === thisSeq) {
+          setRecommendations([]);
+          setIsDebouncing(false);
+        }
         return;
       }
 
       try {
         const aiRecs = await aiService.generateRecommendationsAsync(currentVal);
-        if (latestInputRef.current.trim() === currentVal) {
+        // 최신 시퀀스이고 입력값도 여전히 일치할 때만 세팅 (전송 후 늦게 도착한 비동기 응답 덮어쓰기 완전 차단)
+        if (recommendationSeqRef.current === thisSeq && latestInputRef.current.trim() === currentVal) {
           setRecommendations(aiRecs || []);
         }
       } catch (err) {
         console.warn("Debounced recommendation error:", err);
       } finally {
-        setIsDebouncing(false);
+        if (recommendationSeqRef.current === thisSeq) {
+          setIsDebouncing(false);
+        }
       }
     }, 400);
   };
@@ -285,40 +293,56 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const handleSend = async (textToSend?: string, koreanDraft?: string, precomputedTranslation?: MessageTranslation) => {
     if (isSending) return;
 
+    // 1. 전송 시작 즉시 대기 중인 모든 비동기 추천 요청 무효화 및 팝업/타이머 즉시 클리어
+    recommendationSeqRef.current++;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    const rawInput = inputText.trim();
+    latestInputRef.current = '';
+    setRecommendations([]);
+    setIsDebouncing(false);
+
     let candidateText = textToSend;
     let candidateDraft = koreanDraft;
 
     // 텍스트박스에서 엔터/전송 버튼을 누른 경우 (textToSend 미지정)
-    if (!candidateText && inputText.trim()) {
+    if (!candidateText && rawInput) {
       setIsSending(true);
-      const rawInput = inputText.trim();
-      if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(rawInput)) {
+      const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(rawInput);
+      if (isKorean) {
         candidateDraft = rawInput;
       }
 
       try {
-        // 1. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
-        if (recommendations.length > 0) {
-          const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
-          candidateText = naturalCard.english;
-        } 
-        // 2. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
-        else {
-          try {
-            setIsDebouncing(true);
-            const recs = await aiService.generateRecommendationsAsync(rawInput);
-            if (recs && recs.length > 0) {
-              const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
-              candidateText = naturalCard.english;
+        // [개선]: 한글이 포함된 경우에만 영어 정제/번역 수행
+        if (isKorean) {
+          // A. 이미 추천 카드가 나와 있는 경우 -> 'Natural' 카드(없으면 첫 번째 카드) 영문으로 자동 채택
+          if (recommendations.length > 0) {
+            const naturalCard = recommendations.find(r => r.tone === 'Natural') || recommendations[0];
+            candidateText = naturalCard.english;
+          } 
+          // B. 아직 추천 카드가 뜨기 전(초고속 엔터)인 경우 -> 즉시 1회 추천 생성하여 정제
+          else {
+            try {
+              setIsDebouncing(true);
+              const recs = await aiService.generateRecommendationsAsync(rawInput);
+              if (recs && recs.length > 0) {
+                const naturalCard = recs.find(r => r.tone === 'Natural') || recs[0];
+                candidateText = naturalCard.english;
+              }
+            } catch (err) {
+              console.warn("Instant recommendation error on send:", err);
+            } finally {
+              setIsDebouncing(false);
             }
-          } catch (err) {
-            console.warn("Instant recommendation error on send:", err);
-          } finally {
-            setIsDebouncing(false);
           }
+        } else {
+          // [개선]: 순수 영문 입력인 경우 -> 사용자가 직접 타이핑한 문장 원형 그대로 즉시 전송!
+          candidateText = rawInput;
         }
 
-        // 3. 만약 추천 생성 실패 시 fallback
+        // C. 만약 추천 생성 실패 시 fallback
         if (!candidateText) {
           candidateText = rawInput;
         }
@@ -328,14 +352,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     }
 
-    const finalMsg = candidateText || inputText;
+    const finalMsg = candidateText || rawInput;
     if (!finalMsg.trim()) {
       setIsSending(false);
       return;
-    }
-
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
     }
 
     try {
@@ -343,15 +363,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
       if (activeThread.partnerEmail && activeThread.id.startsWith('dm_') && user?.email) {
         storageService.setTypingStatus(activeThread.id, user.email, false);
       }
+
+      // 한글 초안이 있고 precomputedTranslation이 없으면, 초안 한글을 0ms 즉시 초동 번역 객체로 제공
+      const initialTranslation: MessageTranslation | undefined = precomputedTranslation || (candidateDraft ? {
+        translation: candidateDraft,
+        keyExpressions: []
+      } : undefined);
+
       onSendMessage(
         finalMsg.trim(), 
-        candidateDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
+        candidateDraft, 
         recommendations,
-        precomputedTranslation
+        initialTranslation
       );
       setInputText('');
       setRecommendations([]);
       setIsDebouncing(false);
+      latestInputRef.current = '';
+
+      // 전송 후 입력창 포커스 재유지
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
     } finally {
       // 아주 짧은 딜레이 후 전송 상태 해제 (중복 연타 방지)
       setTimeout(() => {
@@ -685,12 +718,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
         )}
       </div>
 
-      {/* 2. AI 스마트 빠른 답장 칩 목록 (내 턴일 때만 표시: 상대방 발화 직후) */}
+      {/* 2. AI 스마트 빠른 답장 칩 목록 (내 턴일 때만 표시: 상대방 발화 직후 & 내가 입력 중이지 않을 때) */}
       {(() => {
         const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
         const isMyTurn = Boolean(lastMessage && lastMessage.sender !== 'user');
 
-        if (!isMyTurn || smartReplies.length === 0) return null;
+        if (!isMyTurn || smartReplies.length === 0 || inputText.trim().length > 0) return null;
 
         return (
           <div className="px-3 py-1.5 bg-[#f8fafd] border-t border-[#e0e3e7] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 animate-in fade-in duration-200">
@@ -728,7 +761,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* 4. 실시간 표현 추천 카드 (심플 & 미니멀) */}
       {recommendations.length > 0 && (
-        <div className="mx-3 mb-2 p-1.5 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150 shrink-0">
+        <div className="mx-3 mb-2 p-2 bg-white border border-[#dadce0] rounded-2xl shadow-md space-y-1 animate-in slide-in-from-bottom-2 duration-150 shrink-0">
+          <div className="flex items-center justify-between px-1.5 py-0.5 border-b border-[#f0f4f9] pb-1 mb-1">
+            <span className="text-[11px] font-semibold text-[#5f6368] flex items-center gap-1">
+              <span className="material-symbols-outlined text-[13px] text-[#1a73e8]">auto_awesome</span>
+              AI 추천 표현 (선택 또는 Enter로 전송):
+            </span>
+            <button
+              onMouseDown={handlePreventBlur}
+              onPointerDown={handlePreventBlur}
+              onClick={() => {
+                recommendationSeqRef.current++;
+                setRecommendations([]);
+              }}
+              className="text-[#747775] hover:text-[#1f1f1f] p-0.5 rounded-full hover:bg-[#f0f4f9] transition-colors flex items-center justify-center"
+              title="추천 닫기 (ESC)"
+            >
+              <span className="material-symbols-outlined text-[15px]">close</span>
+            </button>
+          </div>
           {recommendations.map((rec) => (
             <div
               key={rec.id}
@@ -750,7 +801,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 </p>
               </div>
 
-              <span className="material-symbols-outlined text-[16px] text-[#9aa0a6] group-hover:text-[#1a73e8] shrink-0">
+              <span className="material-symbols-outlined text-[16px] text-[#9aa0a6] group-hover:text-[#1a73e8] shrink-0" title="이 표현으로 전송">
                 arrow_upward
               </span>
             </div>
@@ -779,7 +830,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
             }, 100);
           }}
           onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              recommendationSeqRef.current++;
+              setRecommendations([]);
+              return;
+            }
             if (e.key === 'Enter' && !isSending) {
+              if (e.nativeEvent.isComposing) return;
               handleSend();
             }
           }}
