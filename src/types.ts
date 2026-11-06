@@ -38,6 +38,11 @@ export interface MessageTranslation {
   keyExpressions: Array<{ phrase: string; meaning: string }>;
 }
 
+export interface SmartReplyItem {
+  reply: string;
+  translation?: MessageTranslation;
+}
+
 export interface Message {
   id: string;
   sender: 'user' | 'assistant';
@@ -49,6 +54,7 @@ export interface Message {
   recommendations?: RecommendationCard[];
   analysis?: MessageAnalysis;
   translation?: MessageTranslation;
+  suggestedReplies?: SmartReplyItem[];
 }
 
 export interface SavedExpression {

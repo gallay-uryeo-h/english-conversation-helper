@@ -302,23 +302,29 @@ const MainApp: React.FC = () => {
     // 로컬스토리지 및 Firestore 저장 (실제 친구인 경우 상대방 이메일 전달하여 상대방 대화방 뱃지 +1)
     await storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
 
-    // 내 발화도 AI 발화와 동일하게 정식 한국어 해석과 핵심 어휘만 깔끔하게 비동기 생성 및 보존
-    if (!precomputedTranslation) {
-      aiService.translateMessageAsync(text).then((transData) => {
-        if (transData && (transData.translation || transData.keyExpressions.length > 0)) {
-          userMsg.translation = transData;
-          storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
-          setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, translation: transData } : m));
-        }
-      }).catch(e => console.warn("User message translation error:", e));
-    }
+    // 1-1. 내 발화의 한국어 해석 및 상대방을 위한 0ms 스마트 빠른 답장 3개 일괄 비동기 동봉 생성
+    aiService.enrichMessageMetadataAsync(text).then((meta) => {
+      let hasUpdate = false;
+      if (!userMsg.translation && meta.translation) {
+        userMsg.translation = meta.translation;
+        hasUpdate = true;
+      }
+      if (meta.suggestedReplies && meta.suggestedReplies.length > 0) {
+        userMsg.suggestedReplies = meta.suggestedReplies;
+        hasUpdate = true;
+      }
+      if (hasUpdate) {
+        storageService.saveMessage(currentThreadId, userMsg, activeThread.partnerEmail);
+        setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, ...userMsg } : m));
+      }
+    }).catch(e => console.warn("User message enrich metadata error:", e));
 
     // 2. [실제 친구와의 대화인 경우] AI 자동 응답을 끄고 종료! (진짜 친구 간 대화 모드)
     if (isFriendChat) {
       return;
     }
 
-    // 3. [AI 친구인 경우] AI 파트너의 응답 및 한국어 해석/핵심표현 일괄 생성 (즉시 응답)
+    // 3. [AI 친구인 경우] AI 파트너의 응답 및 한국어 해석/핵심표현 + 빠른 답장 동봉 생성 (즉시 응답)
     try {
       const replyData = await aiService.generateAssistantReplyAsync(
         currentPartnerName, 
@@ -329,7 +335,8 @@ const MainApp: React.FC = () => {
         sender: 'assistant',
         text: replyData.reply,
         timestamp: Date.now(),
-        translation: replyData.translation
+        translation: replyData.translation,
+        suggestedReplies: replyData.suggestedReplies
       };
 
       // 사용자가 방을 나간 상태여도 백그라운드에서 스레드에 안전하게 저장 완료

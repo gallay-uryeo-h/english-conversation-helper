@@ -194,13 +194,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
       return;
     }
 
-    // 1. 기존에 생성된 빠른 답장이 있다면 로컬 캐시에서 0ms 즉시 복원
+    // 1. [0ms 즉각 노출] 상대방 발화 메시지 자체에 빠른 답장이 동봉되어 있는 경우 즉시 반영!
+    if (lastMessage.suggestedReplies && lastMessage.suggestedReplies.length > 0) {
+      setSmartReplies(lastMessage.suggestedReplies);
+      setCachedSmartReplies(activeThread.id, lastMessage.text, lastMessage.suggestedReplies);
+      return;
+    }
+
+    // 2. 로컬 캐시에 기존 저장된 답장이 있는 경우 0ms 복원
     const cached = getCachedSmartReplies(activeThread.id, lastMessage.text);
     if (cached) {
       setSmartReplies(cached);
+      return;
     }
 
-    // 2. 캐시가 없거나 최신 문맥에 맞게 새로 로드
+    // 3. 이전 발화의 빠른 답장이 찰나에 튀지 않도록 이전 잔여 답장 클리어
+    setSmartReplies([]);
+
+    // 4. 레거시 메시지 등 동봉되지 않은 경우 비동기 보조 생성
     const fetchSmartReplies = async () => {
       try {
         const replies = await aiService.generateSmartRepliesAsync(messages, activeThread.partnerName);
@@ -215,7 +226,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     fetchSmartReplies();
     return () => { isCancelled = true; };
-  }, [activeThread.id, lastMessage?.id, lastMessage?.text]);
+  }, [activeThread.id, lastMessage?.id, lastMessage?.text, (lastMessage?.suggestedReplies || []).length]);
 
   // 한글 또는 영어 입력 디바운스 (400ms 시차를 두어 API 과도 호출 및 Rate Limit 방지)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
