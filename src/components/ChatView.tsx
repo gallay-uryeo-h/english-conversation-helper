@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Thread, Message, RecommendationCard, MessageTranslation } from '../types';
 import { aiService, SmartReplyItem, DEFAULT_SMART_REPLIES } from '../services/aiService';
+import { useAuth } from '../contexts/AuthContext';
+import { storageService } from '../services/storageService';
 
 interface ChatViewProps {
   activeThread: Thread;
@@ -13,10 +15,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
   messages,
   onSendMessage
 }) => {
+  const { user } = useAuth();
   const [inputText, setInputText] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
   const [isDebouncing, setIsDebouncing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+
+  // 상대방 타이핑 상태 및 상대방 마지막 읽은 시각 ('1' 마커 소멸용)
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [partnerLastReadTime, setPartnerLastReadTime] = useState<number>(0);
+  const lastTypingPingRef = useRef<number>(0);
 
   // 말풍선 한국어 해석 아코디언 펼침 여부 상태 (0ms 즉시 토글)
   const [expandedMsgIds, setExpandedMsgIds] = useState<Record<string, boolean>>({});
@@ -32,14 +40,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 아코디언 열기 전의 스크롤 위치를 메시지별로 저장 (닫을 때 원래 위치 복귀용)
   const prevScrollTopsRef = useRef<Record<string, number>>({});
 
-  // 컴포넌트 언마운트 시 재생 중이던 음성 취소
+  // 컴포넌트 언마운트 시 재생 중이던 음성 취소 및 타이핑 상태 해제
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
+      if (activeThread.partnerEmail && activeThread.id.startsWith('dm_') && user?.email) {
+        storageService.setTypingStatus(activeThread.id, user.email, false);
+      }
     };
-  }, []);
+  }, [activeThread.id, activeThread.partnerEmail, user?.email]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
@@ -98,6 +109,53 @@ export const ChatView: React.FC<ChatViewProps> = ({
     };
   }, []);
 
+  // 1:1 DM 대화방 상대방 타이핑 상태 실시간 구독
+  useEffect(() => {
+    if (!activeThread.partnerEmail || !activeThread.id.startsWith('dm_')) {
+      setIsPartnerTyping(false);
+      return;
+    }
+    const unsub = storageService.subscribeToTypingStatus(
+      activeThread.id,
+      activeThread.partnerEmail,
+      (typing) => {
+        setIsPartnerTyping(typing);
+        if (typing) scrollToBottom(true);
+      }
+    );
+    return () => unsub();
+  }, [activeThread.id, activeThread.partnerEmail]);
+
+  // 1:1 DM 대화방 상대방 읽음 시각 구독 ('1' 마커 즉시 소멸 연동)
+  useEffect(() => {
+    if (!activeThread.partnerEmail || !activeThread.id.startsWith('dm_')) return;
+    const unsub = storageService.subscribeToThreadReadStatus(
+      activeThread.id,
+      activeThread.partnerEmail,
+      (ts) => setPartnerLastReadTime(ts)
+    );
+    return () => unsub();
+  }, [activeThread.id, activeThread.partnerEmail]);
+
+  // 대화방 입장 및 신규 메시지 수신 시 내 읽음 시각 최신화 (상대방 화면의 '1' 즉시 제거)
+  useEffect(() => {
+    if (activeThread.id.startsWith('dm_') && user?.email) {
+      storageService.updateThreadReadTimestamp(activeThread.id, user.email);
+    }
+  }, [activeThread.id, messages.length, user?.email]);
+
+  // 대화 시간 포맷 헬퍼 (카카오톡 스타일 오전/오후 HH:MM)
+  const formatMessageTime = (timestamp?: number): string => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const period = hours < 12 ? '오전' : '오후';
+    const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+    const displayMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    return `${period} ${displayHours}:${displayMinutes}`;
+  };
+
   // 입력창 포커스 시 브라우저의 기본 페이지 스크롤 억제 및 대화 영역 보정
   const handleInputFocus = () => {
     setTimeout(() => {
@@ -130,6 +188,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
     const val = e.target.value;
     setInputText(val);
     latestInputRef.current = val;
+
+    // 상대방에게 '... 입력 중' 상태 실시간 전달 (2초 단위 디바운스)
+    if (activeThread.partnerEmail && activeThread.id.startsWith('dm_') && user?.email) {
+      const now = Date.now();
+      if (val.trim()) {
+        if (now - lastTypingPingRef.current > 2000) {
+          lastTypingPingRef.current = now;
+          storageService.setTypingStatus(activeThread.id, user.email, true);
+        }
+      } else {
+        storageService.setTypingStatus(activeThread.id, user.email, false);
+      }
+    }
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -224,6 +295,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     try {
       setIsSending(true);
+      if (activeThread.partnerEmail && activeThread.id.startsWith('dm_') && user?.email) {
+        storageService.setTypingStatus(activeThread.id, user.email, false);
+      }
       onSendMessage(
         finalMsg.trim(), 
         candidateDraft || (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(inputText) ? inputText : undefined), 
@@ -401,13 +475,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
               id={`chat-msg-${msg.id}`}
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
-              <div className="flex items-start gap-2 max-w-[88%]">
+              <div className="flex items-end gap-1.5 max-w-[88%]">
+                {/* 상대방 메시지 아바타 (좌측 상단 정렬) */}
                 {!isUser && (
                   <div
-                    className="w-8 h-8 rounded-full text-[12px] font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-xs"
+                    className="w-8 h-8 rounded-full text-[12px] font-bold flex items-center justify-center shrink-0 self-start mt-0.5 shadow-xs"
                     style={{ backgroundColor: activeThread.avatarBg, color: '#1f1f1f' }}
                   >
                     {activeThread.avatarText}
+                  </div>
+                )}
+
+                {/* 내 메시지일 때: 좌측 하단에 카카오톡 스타일 '1' (안 읽음) 및 전송 시간 */}
+                {isUser && (
+                  <div className="flex flex-col items-end justify-end shrink-0 select-none pb-0.5 text-right">
+                    {/* 1:1 대화방이고 상대방이 아직 해당 메시지 시각 이후로 읽지 않은 경우 노란색 '1' */}
+                    {activeThread.partnerEmail && (!partnerLastReadTime || partnerLastReadTime < msg.timestamp) && (
+                      <span className="text-[11px] font-bold text-[#f29900] leading-none mb-1 mr-0.5" title="상대방 미확인">
+                        1
+                      </span>
+                    )}
+                    <span className="text-[10px] text-[#747775] leading-none font-normal">
+                      {formatMessageTime(msg.timestamp)}
+                    </span>
                   </div>
                 )}
 
@@ -515,10 +605,39 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* 상대방 메시지일 때: 우측 하단에 전송 시간 */}
+                {!isUser && (
+                  <div className="flex flex-col justify-end shrink-0 select-none pb-0.5">
+                    <span className="text-[10px] text-[#747775] leading-none font-normal">
+                      {formatMessageTime(msg.timestamp)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           );
         }))}
+
+        {/* 상대방 타이핑 중 실시간 인디케이터 말풍선 */}
+        {isPartnerTyping && (
+          <div className="flex items-center gap-2 max-w-[88%] animate-in fade-in duration-200">
+            <div
+              className="w-8 h-8 rounded-full text-[12px] font-bold flex items-center justify-center shrink-0 self-start mt-0.5 shadow-xs"
+              style={{ backgroundColor: activeThread.avatarBg, color: '#1f1f1f' }}
+            >
+              {activeThread.avatarText}
+            </div>
+            <div className="bg-white text-[#5f6368] border border-[#e0e3e7] rounded-2xl rounded-tl-xs px-3.5 py-2 text-[12px] flex items-center gap-2 shadow-xs">
+              <span className="font-medium text-[#1f1f1f]">{activeThread.partnerName}님이 입력 중</span>
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-[#1a73e8] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 bg-[#1a73e8] rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 bg-[#1a73e8] rounded-full animate-bounce"></span>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. AI 스마트 빠른 답장 칩 목록 (사전 번역 탑재, 대화가 있을 때만 표시) */}
@@ -534,9 +653,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
               onMouseDown={handlePreventBlur}
               onPointerDown={handlePreventBlur}
               onClick={() => handleSend(item.reply, undefined, item.translation)}
-              className="px-3 py-1 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0"
+              className="px-3 py-1.5 rounded-full bg-white border border-[#c2e7ff] text-[#005bbf] text-[12px] font-medium whitespace-nowrap hover:bg-[#e8f0fe] active:scale-95 transition-all shadow-xs shrink-0 flex items-center gap-1.5 group"
             >
-              {item.reply}
+              <span className="font-semibold">{item.reply}</span>
+              {item.translation?.translation && item.translation.translation !== item.reply && (
+                <span className="text-[10px] text-[#5f6368] group-hover:text-[#1a73e8] border-l border-[#d2e3fc] pl-1.5 max-w-[150px] truncate">
+                  {item.translation.translation}
+                </span>
+              )}
             </button>
           ))}
         </div>

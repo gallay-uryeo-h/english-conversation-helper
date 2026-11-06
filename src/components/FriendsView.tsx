@@ -135,18 +135,27 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
         </div>
 
         {filteredFriends.map((friend) => {
-          const friendThreads = threads.filter(t => t.partnerName === friend.name);
+          const friendThreads = threads.filter(t => 
+            friend.email && t.partnerEmail 
+              ? t.partnerEmail.toLowerCase() === friend.email.toLowerCase()
+              : t.partnerName === friend.name
+          );
+          const unreadCount = friendThreads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
 
           return (
             <div 
               key={friend.id}
-              className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow transition-shadow flex items-center justify-between gap-3"
+              onClick={() => onStartChat(friend, false)}
+              className="bg-white rounded-2xl p-3.5 border border-[#e0e3e7] shadow-sm hover:shadow hover:border-[#1a73e8]/30 transition-all flex items-center justify-between gap-3 cursor-pointer group"
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 {/* 친구 원형 버튼 (누르면 정보 팝업 및 삭제) */}
                 <button 
                   type="button"
-                  onClick={() => setSelectedFriendForInfo(friend)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedFriendForInfo(friend);
+                  }}
                   className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center font-bold text-[16px] text-[#1f1f1f] shrink-0 shadow-xs cursor-pointer hover:ring-2 hover:ring-[#1a73e8] active:scale-95 transition-all"
                   style={{ backgroundColor: friend.avatarBg }}
                   title={`${friend.name} 정보 및 관리`}
@@ -157,52 +166,80 @@ export const FriendsView: React.FC<FriendsViewProps> = ({
                     <span>{friend.avatarText}</span>
                   )}
                 </button>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate">
+                    <h3 className="text-[14px] font-bold text-[#1f1f1f] truncate group-hover:text-[#1a73e8] transition-colors">
                       {friend.name}
                     </h3>
+                    {unreadCount > 0 && (
+                      <span className="bg-[#d93025] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-xs animate-pulse">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                     {friend.isAi && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#c2e7ff] text-[#001d35]">
                         AI
                       </span>
                     )}
                   </div>
-                  {friend.email && (
+                  {friend.email ? (
                     <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
                       {friend.email}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#5f6368] truncate mt-0.5">
+                      회화 연습 AI 코치
                     </p>
                   )}
                 </div>
               </div>
 
-              {friendThreads.length > 0 ? (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => onStartChat(friend, false)}
-                    className="px-2.5 py-1.5 bg-[#f0f4f9] hover:bg-[#e2e7ff] text-[#1f1f1f] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
-                    title="기존 최근 대화방 이어하기"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">forum</span>
-                    <span>이어하기 ({friendThreads.length})</span>
-                  </button>
-                  <button
-                    onClick={() => onStartChat(friend, true)}
-                    className="px-2.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
-                    title="새 대화방(스레드) 개설"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">add</span>
-                    <span>새 대화</span>
-                  </button>
-                </div>
-              ) : (
+              {/* 우측 액션 버튼: 실제 친구는 원클릭 '대화하기', AI는 이어하기/새 대화 */}
+              {!friend.isAi ? (
                 <button
-                  onClick={() => onStartChat(friend, true)}
-                  className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartChat(friend, false);
+                  }}
+                  className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-bold text-xs rounded-xl flex items-center gap-1 transition-all shrink-0 shadow-xs"
                 >
                   <span className="material-symbols-outlined text-[15px]">chat</span>
                   대화하기
                 </button>
+              ) : (
+                friendThreads.length > 0 ? (
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => onStartChat(friend, false)}
+                      className="px-2.5 py-1.5 bg-[#f0f4f9] hover:bg-[#e2e7ff] text-[#1f1f1f] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
+                      title="기존 최근 대화방 이어하기"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">forum</span>
+                      <span>이어하기</span>
+                    </button>
+                    <button
+                      onClick={() => onStartChat(friend, true)}
+                      className="px-2.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shadow-xs"
+                      title="새 대화방(스레드) 개설"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">add</span>
+                      <span>새 대화</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStartChat(friend, true);
+                    }}
+                    className="px-3.5 py-1.5 bg-[#e8f0fe] hover:bg-[#d2e3fc] active:bg-[#c2e7ff] text-[#1a73e8] font-semibold text-xs rounded-xl flex items-center gap-1 transition-colors shrink-0 shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">chat</span>
+                    대화하기
+                  </button>
+                )
               )}
             </div>
           );

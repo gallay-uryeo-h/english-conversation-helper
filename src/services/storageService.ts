@@ -300,7 +300,7 @@ export const storageService = {
     });
   },
 
-  // 특정 스레드 읽음 처리 (카카오톡 뱃지 0으로 초기화)
+  // 특정 스레드 읽음 처리 (카카오톡 뱃지 0으로 초기화 + 읽음 타임스탬프 갱신)
   async markThreadAsRead(threadId: string): Promise<void> {
     const localKey = getLocalKey('app_threads');
     try {
@@ -327,6 +327,11 @@ export const storageService = {
         }
       } catch (e) {
         console.warn("markThreadAsRead error:", e);
+      }
+
+      // DM인 경우 상대방에게 읽었음을 알리는 읽음 타임스탬프 동기화
+      if (threadId.startsWith('dm_')) {
+        await this.updateThreadReadTimestamp(threadId, currentUserEmail);
       }
     }
   },
@@ -498,6 +503,81 @@ export const storageService = {
     }, (err) => {
       console.warn("subscribeToMessages error:", err);
     });
+  },
+
+  // 1:1 대화방 내 마지막 읽은 시각 갱신 (카카오톡 '1' 마커 해제용)
+  async updateThreadReadTimestamp(threadId: string, email: string): Promise<void> {
+    if (!threadId.startsWith('dm_') || !email) return;
+    const cleanKey = cleanEmailKey(email);
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, `dm_read_${threadId}`);
+      await setDoc(docRef, { [cleanKey]: Date.now() }, { merge: true });
+    } catch (e) {
+      console.warn("updateThreadReadTimestamp error:", e);
+    }
+  },
+
+  // 1:1 대화방 상대방의 마지막 읽은 시각 실시간 구독 ('1' 마커 즉시 소멸 연동)
+  subscribeToThreadReadStatus(threadId: string, partnerEmail: string, callback: (lastReadTimestamp: number) => void): () => void {
+    if (!threadId.startsWith('dm_') || !partnerEmail) return () => {};
+    const cleanPartner = cleanEmailKey(partnerEmail);
+    const docRef = doc(db, ROOT_COLLECTION_NAME, `dm_read_${threadId}`);
+    return onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const lastRead = Number(data?.[cleanPartner] || 0);
+        callback(lastRead);
+      } else {
+        callback(0);
+      }
+    }, (err) => {
+      console.warn("subscribeToThreadReadStatus error:", err);
+    });
+  },
+
+  // 타이핑 인디케이터 상태 갱신 (상대방에게 '... 입력 중' 표시)
+  async setTypingStatus(threadId: string, email: string, isTyping: boolean): Promise<void> {
+    if (!threadId.startsWith('dm_') || !email) return;
+    const cleanKey = cleanEmailKey(email);
+    try {
+      const docRef = doc(db, ROOT_COLLECTION_NAME, `dm_typing_${threadId}`);
+      await setDoc(docRef, { [cleanKey]: isTyping ? Date.now() : 0 }, { merge: true });
+    } catch (e) {
+      console.warn("setTypingStatus error:", e);
+    }
+  },
+
+  // 상대방 타이핑 상태 실시간 구독
+  subscribeToTypingStatus(threadId: string, partnerEmail: string, callback: (isTyping: boolean) => void): () => void {
+    if (!threadId.startsWith('dm_') || !partnerEmail) return () => {};
+    const cleanPartner = cleanEmailKey(partnerEmail);
+    const docRef = doc(db, ROOT_COLLECTION_NAME, `dm_typing_${threadId}`);
+    let checkTimer: any = null;
+
+    const unsubscribe = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const lastTypingTime = Number(data?.[cleanPartner] || 0);
+        const isNowTyping = (Date.now() - lastTypingTime) < 3500;
+        callback(isNowTyping);
+
+        if (checkTimer) clearTimeout(checkTimer);
+        if (isNowTyping) {
+          checkTimer = setTimeout(() => {
+            callback(false);
+          }, 3600);
+        }
+      } else {
+        callback(false);
+      }
+    }, (err) => {
+      console.warn("subscribeToTypingStatus error:", err);
+    });
+
+    return () => {
+      if (checkTimer) clearTimeout(checkTimer);
+      unsubscribe();
+    };
   },
 
   // 메시지 전송 및 저장 (친구 DM 공유 저장 + 카카오톡 스타일 상대방 뱃지 갱신)

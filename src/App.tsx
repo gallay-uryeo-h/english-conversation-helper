@@ -211,7 +211,7 @@ const MainApp: React.FC = () => {
 
   // 활성 스레드 선택하여 대화방 입장 (카카오톡 스타일 읽음 처리)
   const handleSelectThread = async (thread: Thread) => {
-    if (thread.unreadCount && thread.unreadCount > 0) {
+    if (thread.id.startsWith('dm_') || (thread.unreadCount && thread.unreadCount > 0)) {
       await storageService.markThreadAsRead(thread.id);
       setThreads(prev => prev.map(t => t.id === thread.id ? { ...t, unreadCount: 0 } : t));
     }
