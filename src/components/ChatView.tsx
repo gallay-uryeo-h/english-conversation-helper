@@ -73,7 +73,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }, [activeThread.id, activeThread.partnerEmail, user?.email]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<any>(null);
   const latestInputRef = useRef<string>('');
   const recommendationSeqRef = useRef<number>(0);
@@ -91,7 +90,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   // 스마트 스크롤 제어:
-  // - 컨테이너 크기 변화(빠른답장 바, 추천창, 키보드) 및 내용 높이 증가 시 완벽하게 바닥으로 보정
+  // - 컨테이너 크기 변화(빠른답장 바, 추천창, 키보드) 및 내용 높이 증가 시 바닥으로 보정
   const scrollToBottom = (smooth = true) => {
     if (!scrollContainerRef.current) return;
     const el = scrollContainerRef.current;
@@ -100,16 +99,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const { scrollHeight, clientHeight } = el;
       if (scrollHeight > clientHeight) {
         el.scrollTo({
-          top: scrollHeight - clientHeight + 40,
+          top: scrollHeight - clientHeight,
           behavior: smooth ? 'smooth' : 'auto'
         });
       } else {
         el.scrollTop = 0;
       }
-      bottomAnchorRef.current?.scrollIntoView({
-        behavior: smooth ? 'smooth' : 'auto',
-        block: 'end'
-      });
     });
   };
 
@@ -550,7 +545,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             isInputFocusedRef.current = false;
           }
         }}
-        className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 space-y-3.5 overscroll-contain flex flex-col"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3.5 overscroll-contain flex flex-col"
       >
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[#747775] my-auto">
@@ -604,7 +599,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 )}
 
                 <div
-                  className={`relative px-4 py-2.5 rounded-2xl shadow-xs text-[14px] leading-relaxed transition-all ${
+                  className={`relative px-3.5 py-2 rounded-2xl shadow-xs text-[14px] leading-relaxed transition-all ${
                     isUser
                       ? 'bg-[#1a73e8] text-white rounded-tr-xs'
                       : 'bg-white text-[#1f1f1f] border border-[#e0e3e7] rounded-tl-xs'
@@ -740,9 +735,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           </div>
         )}
-
-        {/* 하단 스크롤 안전 앵커 및 쾌적한 여백 */}
-        <div ref={bottomAnchorRef} className="h-3 shrink-0 select-none pointer-events-none" />
       </div>
 
       {/* 2. AI 스마트 빠른 답장 칩 목록 (내 턴일 때만 표시: 상대방 발화 직후 & 내가 입력 중이지 않을 때) */}
